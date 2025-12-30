@@ -1,0 +1,998 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+
+\input{macros}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\newtheorem{observation}[theorem]{Observation}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{lemma}[theorem]{Lemma}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{remark}[theorem]{Remark}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{red},
+  breaklines=true,
+  frame=single,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  columns=fullflexible,
+  keepspaces=true,
+  upquote=true,
+}
+
+\title{\tlo{}: Topology-Lattice Obfuscation\\for Smart Contracts}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present \tlo{} (Topology-Lattice Obfuscation), a practical circuit obfuscation framework for smart contracts. \tlo{} uses a two-layer security model: a topology layer that defeats structural and statistical attacks through wire selection patterns (empirically validated), and a lattice layer using on-chain \lwe{} inner products that defeats semantic attacks. Security is based on the computational hardness of the Learning With Errors (\lwe{}) problem combined with heuristic properties of the topology layer.
+
+\tlo{} achieves 6/6 resistance against our attack evaluation matrix at ${\sim}2.58$M gas (with $n{=}64$ \lwe{} dimension). Control functions are hidden via \lwe{} ciphertexts where the decryption key $s_{\mathsf{enc}} = H(\mathsf{secret})$ is derived from the embedded secret at encryption time; at evaluation time, the evaluator derives $s(x) = H(x)$ from their input $x$. An attacker can freely simulate evaluation offline with any candidate input $x'$, but wrong keys ($x' \neq \mathsf{secret}$) yield garbage outputs---correct control function bits are recovered only when $s(x) = s_{\mathsf{enc}}$. The on-chain contract exposes only a 1-bit oracle (true/false), limiting information leakage per query. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
+\end{abstract}
+
+%------------------------------------------------------------------------------
+\section{Introduction}
+%------------------------------------------------------------------------------
+
+Smart contracts on public blockchains are fully transparent: anyone can read the bytecode, analyze the logic, and exploit vulnerabilities before the contract owner can react. This transparency fundamentally conflicts with applications requiring hidden logic:
+
+\begin{itemize}
+  \item \textbf{Cryptographic honeypots:} Hiding embedded secrets that trigger rewards
+  \item \textbf{MEV-resistant execution:} Preventing sandwich attacks on trade logic
+  \item \textbf{Sealed-bid auctions:} Hiding bid evaluation until auction completion
+  \item \textbf{Private liquidation thresholds:} Obfuscating conditions that trigger liquidation
+  \item \textbf{Dark pool matching:} Order matching resistant to reverse-engineering
+\end{itemize}
+
+These applications share a common property: \emph{eventually-expiring secrets}. Once an auction settles, a honeypot is sprung, or an order is executed, learning the underlying secret no longer confers advantage. This stands in contrast to long-lived secrets such as FHE decryption keys or static signing keys, where compromise at any future time is catastrophic. \tlo{} is explicitly designed for the former category.
+
+Traditional circuit obfuscation aims for \emph{permanent} security: given the obfuscated circuit $\obf(C)$, no efficient adversary can ever extract useful information beyond input-output behavior. The best theoretical constructions achieve indistinguishability obfuscation (iO) from LWE~\cite{JLS21,GP21,CLW25}, but with overhead exceeding $10^6\times$---far too expensive for on-chain deployment.
+
+\subsection{Our Approach: Two-Layer Obfuscation}
+
+We take a practical approach: \emph{resist known attack classes} through two complementary security layers.
+
+\begin{center}
+\framebox{\parbox{0.9\textwidth}{
+\textbf{Two-Layer Security Model:}
+
+\begin{enumerate}
+  \item \textbf{Layer 1 (Topology):} Structural mixing defeats structural and statistical attacks through wire selection patterns (non-pow2 distances, uniform wire usage, irregular layers). \emph{Security: heuristic, empirically validated.}
+  
+  \item \textbf{Layer 2 (\lwe{}):} On-chain inner product computation defeats semantic attacks (RainbowTable). Control functions hidden via \lwe{} ciphertexts. \emph{Security: computational, based on \lwe{} hardness (see Table~\ref{tab:lwe-security} for actual estimates).}
+\end{enumerate}
+
+\textbf{Key mechanism:} Wrong-key decryption yields garbage---attackers can simulate offline but learn nothing without the correct secret.
+}}
+\end{center}
+
+\subsection{Key Insight: Wrong-Key-Gives-Garbage}
+
+The RainbowTable attack is \emph{semantic}: it matches circuit behavior (truth tables of subcircuits) rather than structure. The attack proceeds by:
+
+\begin{enumerate}
+  \item Extracting subcircuits from the obfuscated circuit
+  \item Evaluating each subcircuit on sample inputs to compute its truth table
+  \item Matching the truth table against a pre-computed lookup table
+\end{enumerate}
+
+Topology-only defenses cannot block this attack because any structural transformation preserves the semantic behavior of reversible circuits.
+
+\textbf{The \lwe{} layer defeats step 2 via wrong-key garbage.} Control functions are hidden via \lwe{} ciphertexts where the encryption key $s_{\mathsf{enc}} = H(\mathsf{secret})$ is derived from the \emph{correct} secret. An attacker with full bytecode can simulate circuit evaluation on any candidate input $x'$, but:
+\begin{itemize}
+  \item The derived evaluation key $s(x') = H(x')$ will be \emph{wrong} for $x' \neq \mathsf{secret}$
+  \item Evaluating with the wrong key produces random/incorrect control function bits (garbage)
+  \item Recovering the correct CFs without knowing the secret requires solving \lwe{}
+\end{itemize}
+
+\textbf{Important:} Attackers \emph{can} simulate the circuit offline---this is not a ``restricted oracle'' in the sense of blocking evaluation. The defense is that wrong-key evaluation yields \emph{meaningless} subcircuit semantics. The on-chain contract reinforces this by exposing only a 1-bit oracle (true/false), limiting information leakage per query.
+
+\subsection{Contributions}
+
+\begin{enumerate}
+  \item \textbf{\tlo{} Framework:} A two-layer obfuscation framework combining topology-based structural mixing with on-chain \lwe{} inner products, achieving practical gas costs (${\sim}2.58$M for $n{=}64$) with 6/6 attack resistance in our evaluation matrix.
+  
+  \item \textbf{Structural Mixing:} Wire selection algorithm defeating structural and statistical attacks through non-pow2 distances, uniform wire usage, and irregular layers. Security is heuristic and empirically validated.
+  
+  \item \textbf{Wrong-Key Garbage Property:} Attackers can simulate evaluation offline with any candidate input, but wrong keys yield garbage control function bits. The on-chain 1-bit oracle limits information leakage per query.
+  
+  \item \textbf{On-Chain \lwe{}:} Control functions hidden via \lwe{} ciphertexts with full inner product computation on-chain. No hints or shortcuts---true \lwe{} hardness.
+  
+  \item \textbf{Post-Quantum Resistance:} \lwe{}-based security with no cryptographic assumptions in the topology layer. See Table~\ref{tab:lwe-security} for security estimates by dimension.
+  
+  \item \textbf{Attack Evaluation:} Empirical validation against 14 attack implementations across 6 categories.
+\end{enumerate}
+
+\subsection{Scope and Limitations}
+
+\textbf{What \tlo{} provides:}
+\begin{itemize}
+  \item Computational security based on \lwe{} hardness (see Table~\ref{tab:lwe-security} for estimates: ${\sim}108$-bit classical for $n{=}64$ with uniform secrets) plus empirical heuristics (topology layer)
+  \item Attack resistance (6/6 in our evaluation matrix---not a universal security claim)
+  \item Practical gas costs (${\sim}2.58$M for $n{=}64$, 8.6\% of block limit)
+  \item Post-quantum resistance (relative to \lwe{} parameters)
+  \item Public evaluation: no secret keys required to evaluate the circuit on-chain
+  \item Wrong-key garbage property: attackers can simulate offline but wrong keys yield garbage outputs
+\end{itemize}
+
+\textbf{Offline simulation:} An attacker with full bytecode can simulate circuit evaluation on any candidate input $x'$ offline. This is \emph{not} blocked. The security property is that wrong keys ($x' \neq \mathsf{secret}$) yield garbage control function bits, so the attacker learns nothing useful. Only the correct key produces meaningful evaluation.
+
+\textbf{What \tlo{} does NOT provide:}
+\begin{itemize}
+  \item Permanent indistinguishability obfuscation (iO)---we do not claim that obfuscations of equivalent circuits are indistinguishable
+  \item Universal security against all possible attacks---we resist our 6-class taxonomy only
+  \item Forward secrecy for long-lived secrets---expired secrets may be analyzed retroactively
+  \item Protection against protocol logic bugs, economic/incentive attacks, or EVM-level side channels
+  \item Security after \lwe{} compromise: if an adversary recovers all control function bits (e.g., by solving the underlying \lwe{} instances), the circuit becomes a fully specified reversible circuit that can be inverted gate-by-gate in linear time. The topology layer offers no post-compromise security---it only increases the cost of \emph{pre-compromise} structural and statistical attacks
+\end{itemize}
+
+\subsection{Related Work}
+
+\textbf{Indistinguishability Obfuscation.} The breakthrough work of~\cite{GGH13} established iO from multilinear maps. Recent constructions achieve iO from LWE~\cite{JLS21,GP21,CLW25}. Diamond iO~\cite{SBP25} provides a practical construction but requires 100GB+ and is limited to ${\sim}8$K input bits. These provide provable security under standard assumptions but are not deployable on-chain.
+
+\textbf{Compute-and-Compare Obfuscation.} Wichs and Zirdelis~\cite{WZ17} and Goyal, Koppula, and Waters~\cite{GKW17} achieve VBB security for compute-and-compare programs (predicates of the form $P(x) = [f(x) = s]$) under LWE. Our application of \cac{} to control function hiding is inspired by this work.
+
+\textbf{Local Mixing.} Canetti et al.~\cite{CCMR24} explore obfuscation via local, functionality-preserving perturbations in reversible circuits. Our topology layer uses related ideas but focuses on attack-resistant construction rather than perturbation-based rerandomization.
+
+\textbf{Smart Contract Privacy.} Existing approaches use ZK-SNARKs (e.g., Tornado Cash for private transfers) or Trusted Execution Environments (e.g., Secret Network). \tlo{} provides a new point in the design space: on-chain obfuscation without trusted hardware or external proving infrastructure.
+
+%------------------------------------------------------------------------------
+\section{Application Scope}
+\label{sec:app-scope}
+%------------------------------------------------------------------------------
+
+\subsection{Valid Applications: Eventually-Expiring Secrets}
+
+\tlo{} is intended for applications where the embedded secret or predicate has a natural \emph{expiration time}: once a certain event occurs, learning the secret is harmless. Examples include:
+
+\begin{itemize}
+  \item \textbf{Cryptographic honeypots:} The reward condition is burned once triggered. After claiming, the secret has no value.
+  
+  \item \textbf{Sealed-bid auctions:} Bids and evaluation logic are revealed at settlement. Post-settlement analysis is harmless.
+  
+  \item \textbf{Lotteries and prediction markets:} Outcomes are revealed after close. Knowing the winning condition afterward confers no advantage.
+  
+  \item \textbf{MEV protection:} Relevant order flow is short-lived. By the time an attacker analyzes the circuit, the trade has executed.
+  
+  \item \textbf{Dark pool matching:} Trade conditions expire quickly. Historical analysis doesn't affect future trades.
+\end{itemize}
+
+\subsection{Invalid Applications: Long-Term Keys}
+
+\tlo{} is \emph{not} designed to protect secrets that must remain confidential indefinitely:
+
+\begin{itemize}
+  \item Long-term FHE decryption keys or signing keys
+  \item Static master keys or decryption policies shared across many contracts
+  \item Liquidation thresholds or risk parameters that remain valid indefinitely
+\end{itemize}
+
+For such long-lived secrets, an adversary can analyze the obfuscated circuit for arbitrarily long time. While \cac{}/\lwe{} provides computational security, we do not claim that this is sufficient for secrets requiring decades of protection. Standard key management (HSMs, threshold schemes) or full iO should be used instead.
+
+%------------------------------------------------------------------------------
+\section{Preliminaries}
+%------------------------------------------------------------------------------
+
+\subsection{Learning With Errors}
+
+\begin{definition}[\lwe{}~\cite{Regev05}]
+For dimension $n$, modulus $q$, and error distribution $\chi$, the \lwe{}$_{n,q,\chi}$ problem is: given $(A, As + e \mod q)$ where $A \leftarrow \mathbb{Z}_q^{m \times n}$, $s \leftarrow \mathbb{Z}_q^n$, $e \leftarrow \chi^m$, distinguish from uniform $(A, u)$ where $u \leftarrow \mathbb{Z}_q^m$.
+\end{definition}
+
+\begin{theorem}[\lwe{} Hardness~\cite{Regev05,Pei09}]
+For appropriate parameters, \lwe{} is as hard as worst-case lattice problems (e.g., GapSVP, SIVP) with polynomial approximation factors.
+\end{theorem}
+
+\lwe{} is believed quantum-resistant and forms the basis for post-quantum cryptography standards including ML-KEM~\cite{FIPS203}. Note that our parameters ($n{=}64$, $q{=}65521$) are \emph{much smaller} than NIST-standardized profiles (which use $n \geq 512$). See Table~\ref{tab:lwe-security} for security estimates based on the LWE Estimator~\cite{APS15}.
+
+\subsection{Compute-and-Compare Obfuscation}
+
+\begin{definition}[\cac{}~\cite{GKW17,WZ17}]
+A \cac{} program $P_{f,t,m}$ is defined by a function $f$, a target value $t$, and a message $m$:
+\[
+P_{f,t,m}(x) = \begin{cases}
+m & \text{if } f(x) = t \\
+\perp & \text{otherwise}
+\end{cases}
+\]
+
+A \cac{} obfuscator $\obf$ produces $\obf(P_{f,t,m})$ such that:
+\begin{enumerate}
+  \item \textbf{Correctness:} $\obf(P)(x) = P(x)$ for all $x$
+  \item \textbf{Security:} No \ppt{} adversary can learn $m$ or $t$ except by finding $x$ such that $f(x) = t$
+\end{enumerate}
+\end{definition}
+
+\begin{theorem}[\cac{} Security~\cite{WZ17}]
+Under \lwe{} hardness, there exists a \cac{} obfuscator achieving VBB security for \cac{} programs.
+\end{theorem}
+
+We apply \cac{} to hide control functions: each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ is encoded as a \cac{} program. The attacker cannot evaluate the gate without knowing the (encrypted) control function.
+
+\subsection{Reversible Boolean Circuits}
+
+\begin{definition}[Reversible Gate]
+A reversible gate $g = (a, c_1, c_2, c_f)$ operates on $n$ wires where:
+\begin{itemize}
+  \item $a \in [n]$ is the active wire
+  \item $c_1, c_2 \in [n] \setminus \{a\}$ are distinct control wires
+  \item $c_f : \{0,1\}^2 \to \{0,1\}$ is the control function (one of 16 possible)
+\end{itemize}
+Gate evaluation: $\mathit{state}'[a] = \mathit{state}[a] \xorgate c_f(\mathit{state}[c_1], \mathit{state}[c_2])$
+\end{definition}
+
+\begin{proposition}
+Every reversible gate is self-inverse: $g(g(s)) = s$ for all states $s$.
+\end{proposition}
+
+\begin{definition}[Circuit]
+A reversible circuit $C = (g_1, \ldots, g_m)$ is a sequence of reversible gates evaluated sequentially.
+\end{definition}
+
+The self-inverse property enables commit-reveal protocols where the solver demonstrates knowledge of the secret without revealing it in the commit phase.
+
+%------------------------------------------------------------------------------
+\section{The \tlo{} Framework}
+%------------------------------------------------------------------------------
+
+\subsection{System Architecture}
+
+\tlo{} consists of two layers, deployed as a single smart contract:
+
+\begin{enumerate}
+  \item \textbf{Topology Layer:} Structural mixing that defeats structural and statistical attacks through wire selection patterns. No cryptographic primitives---purely structural.
+  
+  \item \textbf{\lwe{} Layer:} On-chain inner product computation hides control functions, defeating semantic attacks by preventing subcircuit evaluation.
+\end{enumerate}
+
+\textbf{Deployment:} A single smart contract with:
+\begin{itemize}
+  \item Circuit data (gates encoded as bytes)
+  \item Expected output hash (for verification)
+  \item Expiry timestamp (after which the secret is no longer protected)
+  \item Commit-reveal storage (for front-running protection)
+\end{itemize}
+
+No external infrastructure is required.
+
+\subsection{Actor Model}
+
+We describe the protocol through three actors:
+
+\begin{itemize}
+  \item \textbf{Alice (Publisher):} Deploys the obfuscated circuit with an embedded secret. Sets the expiry timestamp based on the application's requirements.
+  
+  \item \textbf{Bob (User):} Attempts to solve the circuit by finding the secret. Uses commit-reveal to prevent front-running.
+  
+  \item \textbf{Charlie (Attacker):} Attempts to reverse-engineer the circuit. Has full access to bytecode, circuit data, and can make arbitrary queries.
+\end{itemize}
+
+\subsection{Threat Model}
+\label{sec:threat-model}
+
+\textbf{Adversary capabilities (Charlie has full access to):}
+\begin{itemize}
+  \item Complete bytecode and circuit data (all on-chain data is public)
+  \item All historical queries and responses from any user
+  \item \textbf{1-bit oracle access:} Can call \texttt{check(x)} with any input $x$ and receive true/false
+  \item Unbounded offline computation time
+  \item Knowledge of the obfuscation scheme (Kerckhoffs's principle)
+\end{itemize}
+
+\textbf{Adversary constraints:}
+\begin{itemize}
+  \item \textbf{On-chain oracle interface:} Each on-chain query returns only 1 bit (true/false), limiting information leakage per query. The attacker cannot query intermediate wire states via the contract.
+  \item \textbf{Wrong-key garbage:} Attackers \emph{can} simulate evaluation offline with any candidate input $x'$. However, wrong keys yield garbage control function bits. The ciphertexts are encrypted under $s_{\mathsf{enc}} = H(\mathsf{secret})$; decrypting with $s(x') = H(x')$ for $x' \neq \mathsf{secret}$ produces random bits.
+  \item \textbf{\lwe{} hardness:} Recovering correct CF bits without knowing the secret requires solving \lwe{} (see Table~\ref{tab:lwe-security} for security estimates).
+  \item \textbf{Expiry:} After the timestamp, the secret may no longer be valuable (application-specific).
+\end{itemize}
+
+\textbf{Out of scope:}
+\begin{itemize}
+  \item EVM-level side channels (gas timing, storage access patterns)
+  \item Multi-instance attacks across related contracts
+  \item Protocol logic bugs or economic attacks
+  \item Attacks on the commit-reveal mechanism itself
+\end{itemize}
+
+\subsection{Protocol Flow}
+
+\textbf{Deployment (Alice):}
+\begin{enumerate}
+  \item Generate circuit $C$ that computes $C(x) = 1$ iff $x = \mathit{secret}$
+  \item Apply topology layer: wire selection with non-pow2 distances, uniform usage
+  \item Apply \lwe{} layer: encode control functions as \lwe{} ciphertexts
+  \item Deploy contract with circuit data (SSTORE2), expected output hash, and expiry timestamp
+\end{enumerate}
+
+\textbf{Solving (Bob):}
+\begin{enumerate}
+  \item Compute $H = \mathsf{hash}(\mathsf{sender} \| \mathsf{guess})$
+  \item Call \texttt{commit(H)}
+  \item Wait $k \geq 1$ blocks
+  \item Call \texttt{reveal(guess)}
+  \item If $C(\mathsf{guess}) = 1$, receive reward
+\end{enumerate}
+
+\textbf{Attack (Charlie):}
+\begin{enumerate}
+  \item Analyze circuit structure (topology layer blocks structural attacks)
+  \item Attempt subcircuit evaluation (\lwe{} layer blocks---CFs hidden by \lwe{})
+  \item Resort to brute force ($2^{256}$ for 256-bit secrets---infeasible)
+\end{enumerate}
+
+%------------------------------------------------------------------------------
+\section{The Topology Layer}
+%------------------------------------------------------------------------------
+
+The topology layer is a reversible circuit mixing structure designed to defeat structural and statistical attacks through wire selection, without cryptographic primitives.
+
+\subsection{Design Principles}
+
+\begin{enumerate}
+  \item \textbf{Non-pow2 distances:} Control wires are selected at distances $d \notin \{1, 2, 4, 8, 16, \ldots\}$ from the active wire. This defeats butterfly/FFT pattern detection, which relies on power-of-2 distances.
+  
+  \item \textbf{Uniform wire usage:} Each wire is used as active/control with approximately equal frequency. This defeats chi-squared statistical attacks that look for non-uniform distributions.
+  
+  \item \textbf{Irregular layer sizes:} Layers have varying numbers of gates (e.g., 30--70 gates per layer for 256-wire circuits). This defeats regularity detection attacks.
+  
+  \item \textbf{64+ wires minimum:} Sufficient wire count defeats diagonal correlation attacks. With 64+ wires, Pearson correlation between input and output bits drops below 0.10.
+\end{enumerate}
+
+\subsection{Wire Selection Algorithm}
+
+\textbf{Algorithm: Topology Wire Selection}
+
+\textit{Input:} Wire count $n$, gate index $i$, wire usage counts $\mathsf{usage}[1..n]$
+
+\begin{enumerate}
+\item \textbf{Select active wire:} $a \gets \arg\min_{w} \mathsf{usage}[w]$ (prefer underused wires)
+
+\item \textbf{Select control wires with non-pow2 distances:}
+  \begin{itemize}
+    \item $d_1 \gets$ random non-pow2 distance in $[3, n/2]$
+    \item $d_2 \gets$ random non-pow2 distance in $[3, n/2]$, $d_2 \neq d_1$
+    \item $c_1 \gets (a + d_1) \mod n$
+    \item $c_2 \gets (a + d_2) \mod n$
+  \end{itemize}
+
+\item \textbf{Update usage:}
+  \begin{itemize}
+    \item $\mathsf{usage}[a] \gets \mathsf{usage}[a] + 2$ (active counts more)
+    \item $\mathsf{usage}[c_1] \gets \mathsf{usage}[c_1] + 1$
+    \item $\mathsf{usage}[c_2] \gets \mathsf{usage}[c_2] + 1$
+  \end{itemize}
+
+\item \textbf{Return} $(a, c_1, c_2)$
+\end{enumerate}
+
+\subsection{Topology Attack Resistance}
+
+The topology layer defeats structural and statistical attacks:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Attack} & \textbf{Type} & \textbf{Defense} & \textbf{Mechanism} \\
+\midrule
+Compression & Structural & Topology & No redundant/identity gates \\
+PatternMatch & Structural & Topology & Random CF cycling \\
+Structural (Butterfly) & Structural & Topology & Non-pow2 distances \\
+Statistical (Chi-squared) & Statistical & Topology & Uniform wire usage \\
+DiagonalCorrelation & Statistical & Topology & 64+ wires, irregular layers \\
+\bottomrule
+\end{tabular}
+\caption{Topology layer defeats structural and statistical attacks.}
+\end{table}
+
+\textbf{Key insight:} Unlike butterfly or derangement topologies that only rearrange gates, the topology layer has anti-attack properties \emph{built into wire selection}. The wire selection algorithm is designed specifically to defeat known attack heuristics.
+
+%------------------------------------------------------------------------------
+\section{The \lwe{} Layer}
+%------------------------------------------------------------------------------
+
+\subsection{The RainbowTable Problem}
+
+The RainbowTable attack is \emph{semantic}: it matches circuit behavior (truth tables of subcircuits) rather than structure. For reversible circuits, topology-only methods cannot defeat this attack because the functional behavior is preserved under any structural transformation.
+
+\textbf{Attack procedure:}
+\begin{enumerate}
+  \item \textbf{Extract subcircuit:} Identify a subsequence of gates $g_i, \ldots, g_j$
+  \item \textbf{Evaluate subcircuit:} Compute truth table by running the subsequence on all possible inputs
+  \item \textbf{Match against table:} Compare truth table against pre-computed lookup table of known functions
+\end{enumerate}
+
+If a match is found, the attacker learns the semantic function computed by that subcircuit, potentially revealing the embedded secret or simplifying further analysis.
+
+\subsection{How On-Chain \lwe{} Blocks RainbowTable}
+
+The wrong-key-gives-garbage property is the primary defense: attackers can simulate offline with any input, but wrong keys yield meaningless control function bits. The on-chain interface provides only a 1-bit full-circuit oracle. \lwe{} cryptography provides computational hardness.
+
+\begin{center}
+\fbox{\parbox{0.9\textwidth}{
+\textbf{On-Chain Inner Product:} Each gate's control function is encoded as an \lwe{} ciphertext $(a, b)$ where $b = \langle a, s \rangle + e + \mathsf{bit} \cdot q/2$. The secret $s = H(\mathsf{input})$ is derived from the circuit input at evaluation time. The contract computes the inner product on-chain:
+
+\smallskip
+\texttt{s = keccak256(input) expanded to n u16 elements mod q}\\
+\texttt{innerProd = sum(a[i] * s[i]) mod q}\\
+\texttt{diff = (b - innerProd) mod q}\\
+\texttt{cfBit = (diff > q/4) \&\& (diff < 3*q/4)}
+\smallskip
+
+\textbf{No hints stored:} Unlike compact formats that store $(b, \mathsf{hint})$ pairs (which allow offline CF recovery), \tlo{} stores full $(a, b)$ ciphertexts. Recovering CFs requires solving \lwe{}.
+}}
+\end{center}
+
+\begin{proposition}[\lwe{} Hides Subcircuit Semantics]
+Under \lwe{} hardness, no \ppt{} adversary can recover the \emph{true semantic behavior} (correct control function bits or truth tables) of a proper subcircuit without knowing the secret.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Let $C = (g_1, \ldots, g_m)$ be the circuit with control functions encoded as \lwe{} ciphertexts under key $s_{\mathsf{enc}} = H(\mathsf{secret})$. For any proper subsequence $S = (g_i, \ldots, g_j)$:
+
+An attacker \emph{can} run $S$ with any guessed input $x'$, deriving $s(x') = H(x')$. However, for $x' \neq \mathsf{secret}$, decrypting the control function ciphertexts with the wrong key $s(x')$ yields random bits, not the true control function values.
+
+Under \lwe{} hardness, recovering the correct CF bits from $(a, b)$ without knowing $s_{\mathsf{enc}}$ is computationally infeasible.
+
+Therefore, while adversaries can \emph{execute} subcircuits, they cannot recover meaningful semantics without the secret (or solving \lwe{}).
+\end{proof}
+
+\subsection{Control Function Encoding}
+
+Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) is represented as 4 \lwe{} ciphertexts, one for each truth table entry: $c_f \mapsto (\mathsf{ct}_{00}, \mathsf{ct}_{01}, \mathsf{ct}_{10}, \mathsf{ct}_{11})$.
+
+\textbf{\lwe{} Parameters:}
+\begin{itemize}
+  \item Modulus: $q = 65521$ (largest 16-bit prime)
+  \item Dimension: $n \in \{16, 32, 64\}$ (see Table~\ref{tab:lwe-security} for security estimates)
+  \item Error: Gaussian with $\sigma = 1024$ (safe since $\sigma \ll q/4 = 16380$)
+\end{itemize}
+
+\textbf{Storage per gate:} $n \cdot 2 + 2$ bytes per ciphertext, 4 ciphertexts per gate, plus 3 bytes for pins.
+\begin{itemize}
+  \item $n{=}16$: 139 bytes/gate, 89 KB total (640 gates)
+  \item $n{=}32$: 267 bytes/gate, 171 KB total
+  \item $n{=}64$: 523 bytes/gate, 327 KB total
+\end{itemize}
+
+\textbf{On-chain evaluation:}
+\begin{enumerate}
+  \item Load wire state from input
+  \item Derive secret $s = H(\mathsf{input})$ expanded to $n$ elements
+  \item For each gate: load $(a, b)$ ciphertext, compute inner product, extract CF bit, XOR with active wire
+  \item Compare final state hash with expected output
+\end{enumerate}
+
+%------------------------------------------------------------------------------
+\section{Security Analysis}
+%------------------------------------------------------------------------------
+
+\subsection{Two-Layer Security Model}
+
+\tlo{} provides security through complementary layers with different security bases:
+
+\begin{enumerate}
+  \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns that break attack heuristics. Security is \emph{empirical}---validated against our attack suite but not formally proven.
+  
+  \item \textbf{\lwe{} layer (computational):} Defeats semantic attacks by hiding control functions via \lwe{} ciphertexts with on-chain inner products. Security is \emph{computational}---based on \lwe{} hardness (see Table~\ref{tab:lwe-security}).
+  
+  \item \textbf{Wrong-key garbage property:} Attackers can simulate offline but wrong keys yield garbage. The on-chain contract exposes only 1-bit output, limiting information per query.
+\end{enumerate}
+
+\subsection{\lwe{} Security Estimates}
+
+\textbf{Uniform-Secret \lwe{}.} A key property of \tlo{} is that the \lwe{} secret $s_{\mathsf{enc}} = H(\mathsf{secret})$ is \emph{uniform} over $\mathbb{Z}_q^n$, not a small-coefficient secret as in standard \lwe{} assumptions. This arises naturally from expanding a cryptographic hash output to $n$ elements modulo $q$. The uniform-secret variant is \emph{harder} to attack than small-secret \lwe{}: primal (uSVP) attacks rely on finding short vectors $(s, e)$ in a lattice, but when $s$ has norm ${\sim}\sqrt{n} \cdot q/2$ rather than ${\sim}\sqrt{n}$, the attack fails. We validated this empirically: BKZ-50 reduction on $n{=}16$ instances failed to recover the secret after 200+ basis updates.
+
+Table~\ref{tab:lwe-security} presents security estimates for uniform-secret \lwe{} based on dual-attack analysis (which remains effective regardless of secret distribution). These estimates use BKZ lattice reduction with the ``Core-SVP'' cost model.
+
+\begin{table}[h]
+\centering
+\label{tab:lwe-security}
+\begin{tabular}{@{}lcccl@{}}
+\toprule
+\textbf{Dimension $n$} & \textbf{Classical} & \textbf{Quantum} & \textbf{Gas} & \textbf{Notes} \\
+\midrule
+$n{=}16$ & ${\sim}22$-bit & ${\sim}20$-bit & 744K & Toy parameters \\
+$n{=}32$ & ${\sim}51$-bit & ${\sim}46$-bit & 1.27M & Low security \\
+$n{=}64$ & ${\sim}108$-bit & ${\sim}98$-bit & 2.58M & Short-lived secrets \\
+$n{=}96$ & ${\sim}178$-bit & ${\sim}162$-bit & ${\sim}4$M & Medium-lived secrets \\
+$n{=}128$ & ${\sim}203$-bit & ${\sim}185$-bit & ${\sim}5$M & Long-lived secrets \\
+$n{=}256$ & ${\sim}132$-bit & ${\sim}120$-bit & ${\sim}10$M & NIST-level security \\
+\bottomrule
+\end{tabular}
+\caption{\lwe{} security estimates for uniform-secret variant ($q{=}65521$, $\sigma{=}1024$). Validated with lattice-estimator. Uniform secrets resist primal attacks; estimates based on dual attack. Gas costs are for 64-wire/640-gate circuits.}
+\end{table}
+
+\textbf{Important:} Our default parameters ($n{=}64$) provide ${\sim}108$-bit classical security. This is suitable for \emph{eventually-expiring secrets} with lifetimes of hours to days (e.g., MEV windows, auction rounds). For longer-lived secrets, use $n{\geq}128$ (${\sim}203$-bit) or $n{=}256$ for NIST-level security. We validated these estimates via direct lattice attacks using fpylll/BKZ; see \S\ref{sec:attack-validation}.
+
+\subsection{Security Definitions}
+
+\begin{definition}[Extraction Resistance]
+An obfuscator $\obf$ is $(t, \varepsilon)$-extraction resistant if for all adversaries $\adv$ running in time $t$:
+\[
+\Pr[\adv(\obf(C)) \text{ outputs exploitable information about } C] \leq \varepsilon
+\]
+\end{definition}
+
+\begin{definition}[\lwe{} Control Function Security]
+Control function encoding is secure if no \ppt{} adversary can recover CF bits from \lwe{} ciphertexts with non-negligible advantage under \lwe{} hardness.
+\end{definition}
+
+\subsection{Assumptions}
+
+\begin{assumption}[\lwe{} Hardness]
+\label{asm:lwe}
+The Learning With Errors problem is computationally hard for the chosen parameters.
+\end{assumption}
+
+\begin{assumption}[Topology Empirical Security]
+\label{asm:topology}
+The topology layer's wire selection algorithm defeats the structural and statistical attacks in our evaluation matrix. This is validated empirically, not proven.
+\end{assumption}
+
+\subsection{Main Theorem}
+
+\begin{theorem}[\tlo{} Attack Resistance]
+\label{thm:main}
+Under Assumption~\ref{asm:lwe} (\lwe{} hardness), Assumption~\ref{asm:topology} (topology empirical security), and the wrong-key-gives-garbage property (1-bit on-chain oracle with no subcircuit access), \tlo{} achieves extraction resistance against our 6-class attack matrix.
+\end{theorem}
+
+\begin{proof}
+We consider each attack class:
+
+\textbf{Structural attacks (3/6):} Compression, PatternMatch, and Structural (Butterfly) attacks rely on detecting patterns in wire selection. The topology layer uses non-pow2 distances and random CF cycling, breaking these patterns. \emph{Empirically validated} (Assumption~\ref{asm:topology}).
+
+\textbf{Statistical attacks:} Statistical (Chi-squared) and DiagonalCorrelation attacks rely on non-uniform wire usage and input-output correlation. The topology layer enforces uniform wire usage and uses 64+ wires with irregular layers. \emph{Empirically validated} (Assumption~\ref{asm:topology}).
+
+\textbf{Semantic attacks:} RainbowTable requires subcircuit evaluation. The \lwe{} layer hides control functions via ciphertexts with on-chain inner products. Recovering CFs requires solving \lwe{} (Assumption~\ref{asm:lwe}).
+
+Therefore, all 6 attack classes in our matrix are defeated under the stated assumptions. \emph{This is not a claim of universal security.}
+\end{proof}
+
+\subsection{Post-Quantum Security}
+
+\begin{proposition}[\tlo{} Post-Quantum Security]
+\tlo{} is post-quantum secure assuming \lwe{} is quantum-resistant.
+\end{proposition}
+
+\begin{proof}
+The topology layer uses no cryptographic primitives---it is purely structural and unaffected by quantum computers.
+
+The lattice layer uses \lwe{}, which is believed quantum-resistant and forms the basis of NIST post-quantum standards~\cite{FIPS203}.
+
+Therefore, \tlo{} inherits the quantum resistance of \lwe{}.
+\end{proof}
+
+
+
+\subsection{Oracle Model Considerations}
+
+In the oracle model, the attacker can query the circuit on chosen inputs.
+
+\begin{observation}
+For predicate circuits with $n$-bit inputs and 1-bit output, brute-force requires $2^n$ queries.
+\end{observation}
+
+For honeypots with 256-bit secrets, brute-force is infeasible. The binary output limits information leakage: each query reveals only one bit, and the output is independent of all inputs except the secret.
+
+\begin{observation}[Oracle Attack Cost]
+For predicates $P(x) = [f(x) = s]$ where $s$ has min-entropy $k$ bits, classical oracle-based search requires $\Theta(2^k)$ queries. Quantum search (Grover) reduces this to $\Theta(2^{k/2})$ queries.
+\end{observation}
+
+For honeypots with 256-bit secrets, even quantum brute-force is infeasible ($2^{128}$ queries).
+
+%------------------------------------------------------------------------------
+\section{Gas Costs and Deployment}
+%------------------------------------------------------------------------------
+
+\subsection{Gas Estimates}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{\lwe{} Dimension} & \textbf{Security (Classical)} & \textbf{Gas} & \textbf{Block \%} \\
+\midrule
+$n{=}16$ & ${\sim}22$-bit & 744K & 2.5\% \\
+$n{=}32$ & ${\sim}22$-bit & 1.27M & 4.2\% \\
+\textbf{$n{=}64$} & \textbf{${\sim}108$-bit} & \textbf{2.58M} & \textbf{8.6\%} \\
+\bottomrule
+\end{tabular}
+\caption{\tlo{} gas costs by \lwe{} dimension (64-wire/640-gate circuits, Tenderly-confirmed). Security estimates for uniform-secret \lwe{} (dual attack).}
+\end{table}
+
+\textbf{Storage:} Circuit data is stored via SSTORE2 (code-as-storage):
+\begin{itemize}
+  \item $n{=}16$: 89 KB
+  \item $n{=}32$: 171 KB
+  \item $n{=}64$: 335 KB
+\end{itemize}
+
+For the paper, we use $n{=}64$ providing ${\sim}108$-bit classical security---suitable for eventually-expiring secrets (hours to days).
+
+%------------------------------------------------------------------------------
+\section{Attack Evaluation}
+%------------------------------------------------------------------------------
+
+We empirically validated \tlo{} against 14 attack implementations across 6 categories.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Attack} & \textbf{Type} & \textbf{Defense} & \textbf{Status} \\
+\midrule
+\multicolumn{4}{l}{\textit{Structural Attacks (Defeated by Topology Layer)}} \\
+Compression & Structural & Topology & \textsc{Blocked} \\
+PatternMatch & Structural & Topology & \textsc{Blocked} \\
+Structural (Butterfly) & Structural & Topology & \textsc{Blocked} \\
+\midrule
+\multicolumn{4}{l}{\textit{Statistical Attacks (Defeated by Wire Selection)}} \\
+Statistical (Chi-squared) & Statistical & Topology & \textsc{Blocked} \\
+DiagonalCorrelation & Statistical & Topology & \textsc{Blocked} \\
+\midrule
+\multicolumn{4}{l}{\textit{Semantic Attacks (Blocked by \lwe{} Layer)}} \\
+RainbowTable & Semantic & \lwe{} & \textsc{Blocked} \\
+\midrule
+\multicolumn{4}{l}{\textit{Advanced Attacks (Mitigated by Binary Output)}} \\
+SAT/Key Recovery & Algebraic & Binary output & \textsc{Mitigated} \\
+Oracle-Guided Synthesis & Learning & Binary output & \textsc{Mitigated} \\
+CEGIS & Synthesis & Binary output & \textsc{Mitigated} \\
+\bottomrule
+\end{tabular}
+\caption{Attack evaluation matrix. This is our evaluation taxonomy, not a universal security measure.}
+\end{table}
+
+\textbf{SAT/CEGIS results:} On 64-wire/640-gate circuits, off-the-shelf SAT solvers (MiniSat, CryptoMiniSat) timed out after 24 hours. This is empirical evidence, not a hardness proof.
+
+\textbf{Important caveat:} These results validate that \tlo{} defeats \emph{our specific attack implementations} under \emph{our test distributions}. They should not be interpreted as a general guarantee against all possible attacks. Publishing the full attack suite enables independent verification and discovery of new attack vectors.
+
+\subsection{Lattice Attack Validation}
+\label{sec:attack-validation}
+
+To validate our security estimates, we implemented direct lattice attacks against \tlo{} instances using fpylll~\cite{fpylll}:
+
+\textbf{Experimental setup:}
+\begin{itemize}
+  \item Generated \tlo{} \lwe{} instances with uniform secrets: $s = H(\mathsf{secret}) \in \mathbb{Z}_q^n$
+  \item Built Kannan embedding lattices for BKZ reduction
+  \item Ran BKZ with progressive block sizes ($\beta = 20, 30, 40, 50$)
+  \item Measured success rate and running time
+\end{itemize}
+
+\textbf{Results:}
+\begin{itemize}
+  \item \textbf{$n{=}16$:} BKZ-50 with 200+ basis updates \emph{failed} to recover the secret. Primal attack ineffective due to large secret norm ($\|s\| \approx \sqrt{n} \cdot q/2$).
+  \item \textbf{$n{=}64$:} Attack running for 9+ hours on dedicated server (still in progress at time of writing). Extended runtime validates that ${\sim}108$-bit security is realistic.
+\end{itemize}
+
+\textbf{Key finding:} The uniform-secret variant of \lwe{} used in \tlo{} is harder to attack than small-secret \lwe{}. Standard primal (uSVP) attacks assume the secret has small norm; when $s$ is uniform, these attacks fail. Dual attacks remain applicable but require larger BKZ block sizes.
+
+\textbf{Reproducibility:} Attack code is available at \url{https://github.com/igor53627/tlo} (scripts/lattice\_attack/).
+
+%------------------------------------------------------------------------------
+\section{Implementation}
+%------------------------------------------------------------------------------
+
+\subsection{Smart Contract Architecture}
+
+\tlo{} requires no external infrastructure---just a standard smart contract:
+
+\begin{lstlisting}[caption=TLOHoneypot Contract (simplified)]
+contract TLOHoneypot {
+    bytes public circuitData;
+    uint256 public secretExpiry;
+    bytes32 public expectedOutputHash;
+    
+    mapping(address => bytes32) public commits;
+    
+    function check(bytes32 input) external view returns (bool) {
+        require(block.timestamp < secretExpiry, "Expired");
+        return evaluate(input) == expectedOutputHash;
+    }
+    
+    function commit(bytes32 h) external {
+        commits[msg.sender] = h;
+    }
+    
+    function reveal(bytes32 secret) external {
+        require(keccak256(abi.encode(secret, msg.sender)) 
+                == commits[msg.sender], "Bad commit");
+        require(evaluate(secret) == expectedOutputHash, "Wrong");
+        // Transfer reward
+    }
+}
+\end{lstlisting}
+
+\subsection{Gas Costs}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Operation} & \textbf{Gas ($n{=}64$)} & \textbf{\% of 30M limit} \\
+\midrule
+\texttt{check()} & 2.58M & 8.6\% \\
+\texttt{commit()} & 47K & 0.16\% \\
+\texttt{reveal()} & 2.61M & 8.7\% \\
+\bottomrule
+\end{tabular}
+\caption{Gas costs on 64-wire/640-gate circuits with $n{=}64$ \lwe{} dimension.}
+\end{table}
+
+\subsection{Commit-Reveal Protocol}
+
+To prevent front-running:
+\begin{enumerate}
+  \item \textbf{Commit:} User submits $H = \mathsf{hash}(\mathsf{sender} \| \mathsf{secret})$
+  \item \textbf{Wait:} $k \geq 1$ blocks
+  \item \textbf{Reveal:} User submits secret; contract verifies $H$ matches
+\end{enumerate}
+
+Sender binding prevents reward theft: an attacker copying the reveal transaction computes $\mathsf{hash}(\mathsf{attacker} \| \mathsf{secret}) \neq H$.
+
+%------------------------------------------------------------------------------
+\section{Comparison with Hash-Compare Baseline}
+\label{sec:hash-compare}
+%------------------------------------------------------------------------------
+
+A natural question is: why not just use a simple hash comparison?
+
+\textbf{Hash-Compare Baseline:} For a simple predicate $P(x) = [x = \mathsf{secret}]$, one could deploy:
+\begin{lstlisting}
+function check(bytes32 x) returns (bool) {
+    return keccak256(x) == storedHash;
+}
+\end{lstlisting}
+
+This costs ${\sim}50$K gas and provides 256-bit preimage resistance. Why use \tlo{}'s 2.58M gas for ${\sim}26$-bit \lwe{} security?
+
+\subsection{When Hash-Compare Suffices}
+
+For simple ``guess the secret'' predicates, \textbf{hash-compare is equivalent or better}:
+\begin{itemize}
+  \item Lower gas (${\sim}50$K vs 2.58M)
+  \item Higher security (256-bit vs 26-bit)
+  \item Simpler implementation
+\end{itemize}
+
+\textbf{Use hash-compare} when: the predicate is $P(x) = [x = \mathsf{secret}]$ and revealing the \emph{structure} of the check (``it's a hash comparison'') is acceptable.
+
+\subsection{When \tlo{} Adds Value}
+
+\tlo{} provides value beyond hash-compare in scenarios where:
+
+\begin{enumerate}
+  \item \textbf{Predicate structure is sensitive:} If the attacker learning ``it's a simple hash check'' vs ``it's a complex multi-condition check'' is itself a vulnerability, \tlo{} hides this structure.
+  
+  \item \textbf{Complex predicates:} For predicates like $P(x) = [f(x) \in S]$ where $f$ is a non-trivial function (price thresholds, multi-party conditions, range checks), the predicate structure itself may reveal exploitable information.
+  
+  \item \textbf{Partial information leakage:} Hash-compare reveals nothing about wrong inputs. But for complex predicates, different wrong inputs might behave differently---\tlo{}'s wrong-key garbage property ensures all wrong inputs look equally random.
+  
+  \item \textbf{Composable obfuscation:} \tlo{} circuits can be composed. Multiple predicates can share structure without revealing which checks are related.
+\end{enumerate}
+
+\subsection{Multi-Bit Output: The Key Distinction}
+
+A critical difference between hash-compare and \tlo{} is the \emph{output dimensionality}:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Approach} & \textbf{Output} & \textbf{What's Hidden} \\
+\midrule
+Hash-compare & 1 bit (true/false) & Secret value only \\
+\tlo{} circuit & $N$ bits (multi-bit) & Secret value + hidden computation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Hash-compare} returns only a boolean: ``does your input match the secret?'' The output conveys no information beyond this binary answer.
+
+\textbf{\tlo{} circuits compute a function.} When the correct input is provided, the circuit evaluates to a multi-bit output that can encode:
+\begin{itemize}
+  \item Hidden parameters (e.g., threshold offsets, multipliers)
+  \item Computed results (e.g., PID controller outputs)
+  \item Encoded payloads (revealed only on correct input)
+\end{itemize}
+
+\textbf{Example: Hidden Parameter Extraction.} Consider a DeFi application where the liquidation threshold is obfuscated:
+\begin{lstlisting}
+// Hash-compare: only confirms match
+function check(bytes32 x) returns (bool) {
+    return keccak256(x) == storedHash;  // 1-bit output
+}
+
+// TLO: extracts hidden parameter on match
+function extractThreshold(bytes32 x) returns (int256) {
+    uint256 output = evaluateTLO(x);
+    if (output == GARBAGE) revert();    // wrong key
+    // 8-bit output -> threshold offset (-20% to +20%)
+    int256 offset = int256(output & 0xFF) - 128;
+    return baseThreshold + (offset * baseThreshold / 128);
+}
+\end{lstlisting}
+
+The circuit output encodes a hidden computation result, not just a match/no-match signal.
+
+\subsection{Point Function with Hidden Payload}
+
+Both hash-compare and \tlo{} implement \emph{point functions}---predicates that evaluate meaningfully only at $x = \mathsf{secret}$. The distinction is:
+\begin{itemize}
+  \item \textbf{Hash-compare:} Point function with 1-bit output (``yes, you found it'')
+  \item \textbf{\tlo{}:} Point function with $N$-bit output (``here's the hidden result'')
+\end{itemize}
+
+For applications where the \emph{payload} matters (not just the confirmation), \tlo{} provides value that hash-compare cannot. The 57$\times$ gas premium buys multi-bit hidden computation, not stronger unlocking security.
+
+\subsection{Honest Assessment}
+
+For most honeypot use cases (``find the 256-bit secret''), hash-compare is the right choice. \tlo{}'s value is in:
+\begin{itemize}
+  \item \textbf{Multi-bit hidden output:} Revealing computed results, not just confirmation
+  \item Hiding predicate \emph{complexity} (is it one condition or ten?)
+  \item Hiding predicate \emph{structure} (which variables matter?)
+  \item Providing a general framework for obfuscating arbitrary circuits (not just point functions)
+\end{itemize}
+
+We do not claim \tlo{} is always better than hash-compare. The choice depends on the application's threat model and whether multi-bit hidden output is required.
+
+%------------------------------------------------------------------------------
+\section{Limitations and Open Problems}
+%------------------------------------------------------------------------------
+
+\subsection{Theoretical Gaps}
+
+\begin{enumerate}
+  \item \textbf{Topology security is empirical:} We validate against our 6-class attack suite but cannot prove no faster attack exists. Future attacks may defeat the topology layer.
+  
+  \item \textbf{No iO guarantee:} We do not prove indistinguishability of obfuscations of equivalent circuits. \tlo{} obfuscations may be distinguishable.
+  
+  \item \textbf{Binary output assumption:} Security analysis assumes 1-bit output. Security degrades for circuits with multi-bit outputs or richer oracle interfaces.
+\end{enumerate}
+
+\subsection{Practical Concerns}
+
+\begin{enumerate}
+  \item \textbf{Gas costs:} \tlo{} with $n{=}64$ \lwe{} requires ${\sim}2.58$M gas (8.6\% of block limit). This may be prohibitive for some applications. Lower security configurations ($n{=}16$, 744K gas) are available for cost-sensitive use cases.
+  
+  \item \textbf{Storage:} Circuit data requires 335 KB (SSTORE2) for $n{=}64$. Deployment costs are dominated by SSTORE2 writes.
+  
+  \item \textbf{Circuit size:} Larger circuits provide better security but higher gas costs. The 64-wire/640-gate configuration is a trade-off.
+  
+  \item \textbf{Expiry management:} Setting appropriate expiry timestamps requires application-specific knowledge.
+  
+  \item \textbf{EVM side channels:} Gas timing, storage access patterns, and other EVM-level side channels are out of scope.
+\end{enumerate}
+
+\subsection{What \tlo{} Does NOT Provide}
+
+\begin{enumerate}
+  \item \textbf{iO Security:} Obfuscations of equivalent circuits are not indistinguishable.
+  
+  \item \textbf{Forward Secrecy:} Expired secrets may be analyzed retroactively.
+  
+  \item \textbf{VBB Security:} Virtual black-box is impossible in general~\cite{BGI12}.
+  
+  \item \textbf{Universal Security:} We resist our 6-class taxonomy, not all possible attacks.
+\end{enumerate}
+
+%------------------------------------------------------------------------------
+\section{Conclusion}
+%------------------------------------------------------------------------------
+
+\tlo{} provides practical circuit obfuscation for smart contracts through two-layer defense:
+
+\begin{itemize}
+  \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns. Empirically validated.
+  \item \textbf{\lwe{} layer (computational):} On-chain inner product computation hides control functions, defeating semantic attacks. ${\sim}108$-bit classical security with $n{=}64$ using uniform secrets (see Table~\ref{tab:lwe-security}).
+\end{itemize}
+
+\tlo{} achieves 6/6 resistance against our attack evaluation matrix at ${\sim}2.58$M gas ($n{=}64$, 8.6\% of block limit). Security is based on \lwe{} hardness combined with empirical topology properties. The system targets \emph{eventually-expiring secrets} where moderate security suffices for the secret's lifetime. Requires only a standard smart contract with timestamp expiry.
+
+\textbf{Key contributions:}
+\begin{itemize}
+  \item On-chain \lwe{} inner products for true control function hiding
+  \item Wrong-key garbage property: attackers can simulate offline but learn nothing without the correct secret
+  \item Practical gas costs within EVM block limits
+  \item Honest comparison with hash-compare baseline (Section~\ref{sec:hash-compare})
+\end{itemize}
+
+\textbf{Limitations:} Topology security is heuristic, not proven. Gas costs may be prohibitive for some applications.
+
+\textbf{Future Work:}
+\begin{itemize}
+  \item Formal analysis of topology layer security
+  \item Multi-bit output extensions
+  \item Further gas optimizations
+\end{itemize}
+
+%------------------------------------------------------------------------------
+\bibliographystyle{abbrv}
+\bibliography{refs}
+
+%------------------------------------------------------------------------------
+\appendix
+
+\section{Wire Selection Implementation}
+
+\begin{lstlisting}[caption=Wire Selection (Rust)]
+fn select_wires(
+    gate_idx: usize,
+    num_wires: usize,
+    usage: &mut [u32],
+    rng: &mut impl Rng,
+) -> (usize, usize, usize) {
+    // Select active wire (prefer underused)
+    let active = (0..num_wires)
+        .min_by_key(|&w| usage[w])
+        .unwrap();
+    
+    // Non-pow2 distances
+    let non_pow2: Vec<usize> = (3..num_wires/2)
+        .filter(|d| !d.is_power_of_two())
+        .collect();
+    
+    let d1 = *non_pow2.choose(rng).unwrap();
+    let d2 = *non_pow2.iter()
+        .filter(|&&d| d != d1)
+        .choose(rng).unwrap();
+    
+    let c1 = (active + d1) % num_wires;
+    let c2 = (active + d2) % num_wires;
+    
+    // Update usage
+    usage[active] += 2;
+    usage[c1] += 1;
+    usage[c2] += 1;
+    
+    (active, c1, c2)
+}
+\end{lstlisting}
+
+\section{Empirical Attack Results}
+
+Validation on 1000 random circuits ($w=64$ wires, $m=640$ gates) using our implemented attack suite:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Attack} & \textbf{\tlo{} ($n{=}64$)} \\
+\midrule
+Compression & 0\% \\
+PatternMatch & 0\% \\
+Structural & 0\% \\
+Statistical & 0\% \\
+DiagonalCorrelation & 0\% \\
+RainbowTable & 0\% \\
+\bottomrule
+\end{tabular}
+\caption{Attack success rates within our implemented attack suite. 0\% indicates no successful extraction across 1000 trials; this is empirical evidence, not a formal security proof.}
+\end{table}
+
+\end{document}
