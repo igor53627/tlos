@@ -26,27 +26,27 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 ### Architecture
 
 ```
-+------------------------------------------------------------------+
-|                       TLOS Architecture                           |
-+------------------------------------------------------------------+
-|                                                                   |
-|  Input x                                                          |
-|     |                                                             |
-|     v                                                             |
-|  [Wire Binding Init: acc_0 = H(seed || x)]                       |
-|     |                                                             |
-|     +---> Gate 0 (LBLO C&C) ---> [Binding Update: acc_1]         |
-|     |                                                             |
-|     +---> Gate 1 (LBLO C&C) ---> [Binding Update: acc_2]         |
-|     |                                                             |
-|     ...                                                           |
-|     |                                                             |
-|     +---> Gate N (LBLO C&C) ---> [Binding Update: acc_N]         |
-|     |                                                             |
-|     v                                                             |
-|  [Verify: acc_N == expected AND output == expectedOutput]        |
-|                                                                   |
-+------------------------------------------------------------------+
++----------------------------------------------------------------+
+|                        TLOS Architecture                       |
++----------------------------------------------------------------+
+|                                                                |
+|  Input x                                                       |
+|     |                                                          |
+|     v                                                          |
+|  [Wire Binding Init: acc_0 = H(seed || x)]                     |
+|     |                                                          |
+|     +---> Gate 0 (LBLO C&C) ---> [Binding Update: acc_1]       |
+|     |                                                          |
+|     +---> Gate 1 (LBLO C&C) ---> [Binding Update: acc_2]       |
+|     |                                                          |
+|     ...                                                        |
+|     |                                                          |
+|     +---> Gate N (LBLO C&C) ---> [Binding Update: acc_N]       |
+|     |                                                          |
+|     v                                                          |
+|  [Verify: acc_N == expected AND output == expectedOutput]      |
+|                                                                |
++----------------------------------------------------------------+
 ```
 
 ## Gas Costs (Measured)
