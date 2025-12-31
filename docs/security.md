@@ -83,12 +83,12 @@ There are two SEH instantiations in this repository:
 
 | Property | Value |
 |----------|-------|
-| LWE dimension | n=128 |
+| LWE dimension | n=768 |
 | Matrix size | 64×64 (full-rank, trivial kernel) |
 | Security basis | Binding via injective linear map (public, invertible) |
-| Post-quantum security | ~98-bit |
-| Gas cost | ~8.5M for 640 gates |
-| Deployment | Deployable on L1 (28% of block) |
+| Post-quantum security | ~120-140 bit |
+| Gas cost | ~10.5M-38.1M for 640 gates |
+| Deployment | Deployable on L1 (17-63% of 60M block) |
 | Role | **Only SEH in the PQ TLOS profile** |
 
 ### Construction
@@ -133,7 +133,7 @@ The `_sehHash` function uses a PRG optimization: instead of calling keccak once 
 - Across batch boundaries, all execution is bound by the SEH chain
 
 **Gas cost:**
-- Full-rank 64×64 SEH with n=128 LWE costs ~8.5M gas for 640 gates (28% of block)
+- Full-rank 64×64 SEH with n=768 LWE costs ~10.5M-38.1M gas for 640 gates (17-63% of 60M block)
 - 5 SEH updates for 640 gates
 - PRG optimization: 320 keccak calls per update (vs 4096 naive)
 
@@ -161,8 +161,8 @@ For the **post-quantum TLOS profile**, only the LWE-based SEH is considered:
 
 | Component | Security Basis | Post-Quantum | Level |
 |-----------|----------------|--------------|-------|
-| CF hiding | LWE hardness (n=128) | Yes | ~98-bit |
-| SEH binding | LWE-based linear binding | Yes | ~98-bit |
+| CF hiding | LWE hardness (n=768) | Yes | ~120-140 bit |
+| SEH binding | LWE-based linear binding | Yes | ~120-140 bit |
 | Unlock mechanism | Hash preimage | Conjectured* | ~256-bit |
 
 *Assumes conservative Grover-style reduction for the hash component.
@@ -170,9 +170,9 @@ For the **post-quantum TLOS profile**, only the LWE-based SEH is considered:
 ### Security Level
 
 The overall system security is determined by the weakest component:
-- **~98-bit post-quantum** (with n=128 LWE parameters)
+- **~120-140 bit post-quantum** (with n=768 LWE parameters)
 
-This is suitable for production applications with moderate security requirements.
+This meets or exceeds standard 128-bit PQ security targets.
 
 ---
 
@@ -180,11 +180,11 @@ This is suitable for production applications with moderate security requirements
 
 The **only** SEH instantiation that is post-quantum is the LWE-based SEH (TLOSLWE). The Keccak-based SEH (TLOSKeccak) is **not** post-quantum secure and is no longer part of the PQ TLOS profile.
 
-With n=128, TLOSLWE provides **~98-bit PQ security**, which is:
-- **Suitable for**: Production applications, medium-term secrets
-- **Marginally below**: Standard 128-bit PQ security target
+With n=768, TLOSLWE provides **~120-140 bit PQ security**, which:
+- **Meets or exceeds**: Standard 128-bit PQ security target
+- **Suitable for**: Long-term secrets, high-security applications
 
-For ~128-bit PQ security, n>=256 would be needed, which requires either L2 deployment or future EVM optimizations.
+The n=768 dimension uses seed-derived a vectors for efficient on-chain generation.
 
 ---
 
@@ -206,7 +206,7 @@ For ~128-bit PQ security, n>=256 would be needed, which requires either L2 deplo
 
 ## Gas / Practicality Note
 
-TLOSLWE with n=128 and full-rank 64×64 SEH costs **~8.5M gas** for a 64w/640g configuration (28% of an Ethereum L1 block). This is based on Tenderly benchmarks; the contract's `estimatedGas()` function returns a conservative upper bound for off-chain tooling.
+TLOSLWE with n=768 and full-rank 64×64 SEH costs **~10.5M-38.1M gas** for a 64w/640g configuration (17-63% of a 60M Ethereum L1 block). This is based on Tenderly benchmarks; the contract's `estimatedGas()` function returns a conservative upper bound for off-chain tooling.
 
 **Optimizations applied:**
 - SEH PRG: 16 coefficients per keccak (320 calls vs 4096)

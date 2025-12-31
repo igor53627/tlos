@@ -34,15 +34,19 @@ cd paper && pdflatex tlos.tex && pdflatex tlos.tex && pdflatex tlos-paper.tex &&
 - `examples/` - Usage examples
 - `paper/` - LaTeX papers
 
-## Current Parameters (n=128 LWE)
+## Ethereum Block Gas Limit
+
+**60,000,000 gas** (60M) - updated as of 2024
+
+## Current Parameters (n=768 LWE)
 
 | Parameter | Value |
 |-----------|-------|
-| LWE dimension | n=128 |
-| PQ security | ~98-bit |
-| Classical security | ~203-bit |
-| Gas | ~8.5M (28% of block) |
-| Storage | 662 KB |
+| LWE dimension | n=768 |
+| PQ security | ~120-140 bit |
+| Classical security | ~250+ bit |
+| Gas | ~10.5M-38.1M (17-63% of 60M block) |
+| Storage | seed-derived a vectors |
 | Batch size | 128 gates |
 | Binding updates | 5 for 640 gates |
 

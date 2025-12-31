@@ -64,7 +64,7 @@ uint256 combined = sehAcc[0] ^ sehAcc[1] ^ sehAcc[2] ^ sehAcc[3] ^ wires;
 sehAcc = _sehHash(combined, batchEnd);
 ```
 
-**Gas cost: ~8.5M for 640 gates (28% of block)**
+**Gas cost: ~10.5M-38.1M for 640 gates (17-63% of 60M block)**
 
 **Keccak-based SEH (TLOSKeccak - Legacy, NOT PQ-secure):**
 
@@ -110,19 +110,19 @@ For LWE-SEH with full-rank matrix, this follows from injectivity (deterministic 
 
 | Scheme | Config | Gas | % of 30M Block | Notes |
 |--------|--------|-----|----------------|-------|
-| TLOSLWE (n=128) | 64w/640g | **~8.5M** | 28% | Full-rank 64x64 SEH, ~98-bit PQ |
+| TLOSLWE (n=768) | 64w/640g | **~10.5M-38.1M** | 17-63% | Full-rank 64x64 SEH, ~120-140 bit PQ |
 | TLOSKeccak | 64w/640g | **~2.6M** | 8.6% | Keccak SEH, NOT PQ-secure |
 
 ### Key Findings
 
-1. **TLOSLWE uses ~8.5M gas** - Deployable on L1 (28% of block)
+1. **TLOSLWE uses ~10.5M-38.1M gas** - Deployable on L1 (17-63% of 60M block)
 2. **PRG optimization reduces overhead** - 320 keccak calls per SEH update (vs 4096 naive)
 3. **Batch SEH (128 gates)** - 5 updates for 640 gates balances security and gas
 
 ### Why TLOSLWE Gas Increased?
 
-Upgrade to n=128 LWE dimension for ~98-bit PQ security:
-- 128-element inner products (vs 64)
+Upgrade to n=768 LWE dimension for ~120-140 bit PQ security:
+- 768-element inner products (seed-derived a vectors)
 - Full-rank 64x64 matrix (vs previous 8x64)
 
 ## Architecture
@@ -166,7 +166,7 @@ Key features:
 - `expectedSehOutput`: 4 x uint256 for 1024-bit SEH output
 - `checkWithSeh()`: Returns both validity and SEH output (for debugging)
 - 128-gate batch SEH updates for gas efficiency
-- n=128 LWE dimension (~98-bit PQ security)
+- n=768 LWE dimension (~120-140 bit PQ security)
 
 ### TLOSKeccak.sol (Legacy, Deprecated)
 
@@ -214,10 +214,10 @@ constructor(
 |--------|------------|------|
 | SEH construction | FHE Merkle + LWE matrix | LWE full-rank 64x64 (TLOSLWE) |
 | Security proof | Formal (s-equivalence) | Heuristic + LWE hardness |
-| Gas cost | Impractical | ~8.5M (practical on L1) |
+| Gas cost | Impractical | ~10.5M-38.1M (practical on L1) |
 | Trapdoor extraction | Yes (for debugging) | No (not needed on-chain) |
 | iO claim | Yes (quasi-linear) | No (representation hiding only) |
-| PQ Security | Yes | Yes (~98-bit with n=128) |
+| PQ Security | Yes | Yes (~120-140 bit with n=768) |
 
 ## Limitations
 

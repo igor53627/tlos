@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-12-31
+
+### Changed
+- Upgraded LWE dimension from n=128 to n=768 (~120-140 bit PQ security)
+- Replaced stored a vectors with seed-derived generation for storage efficiency
+- Gas range now ~10.5M-38.1M depending on circuit configuration (17-63% of 60M block)
+
+### Added
+- Seed-derived a vector generation using keccak256 PRG
+- Updated documentation for n=768 parameters
+
 ## [0.3.0] - 2025-12-31
 
 ### Changed

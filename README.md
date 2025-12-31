@@ -9,7 +9,7 @@ TLOS is a practical circuit obfuscation framework for EVM. It uses a noiseless L
 TLOS provides three-layer security for on-chain circuit obfuscation:
 
 1. **Topology layer**: Structural mixing defeats structural/statistical attacks (heuristic)
-2. **LBLO layer**: Noiseless LWE-like inner products hide control functions (heuristic ~2^98 PQ)
+2. **LBLO layer**: Noiseless LWE-like inner products hide control functions (heuristic ~2^120-140 PQ for n=768)
 3. **Wire binding layer**: Full-rank 64x64 public linear map binds wire values across gates (algebraic binding, not cryptographic hashing)
 
 The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.iacr.org/2025/307) but is **not** subspace-evasive in the formal sense - it is a public bijective linear map providing algebraic binding, not cryptographic hiding.
@@ -19,7 +19,7 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 | Layer | Purpose | Security |
 |-------|---------|----------|
 | **T**opology | Anti-attack wire patterns (non-pow2 distances, uniform usage) | Heuristic (empirical) |
-| **L**attice (LBLO) | Control function hiding via noiseless LWE-like inner products | Heuristic (~2^98 PQ LBLO) |
+| **L**attice (LBLO) | Control function hiding via noiseless LWE-like inner products | Heuristic (~2^120-140 PQ for n=768) |
 | **O**bfuscation | Circuit representation hiding | Heuristic |
 | Wire **B**inding | Inter-gate wire consistency via full-rank linear hash | Algebraic binding |
 
@@ -49,17 +49,39 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 +----------------------------------------------------------------+
 ```
 
-## Gas Costs (Measured)
+## Gas Costs (Measured on Tenderly)
 
-| Variant | Config | Gas | % of Block | Security (Heuristic) |
-|---------|--------|-----|------------|----------------------|
-| **TLOS (n=128, full-rank 64x64 binding)** | 64w/640g | ~8.5M | 28% | Heuristic ~2^98 PQ (LBLO) |
+| Config (n=768) | Gates | Gas | % of 60M Block | Security (Heuristic) |
+|----------------|-------|-----|----------------|----------------------|
+| Conservative | 64 | 10.5M | 17% | ~2^140 PQ |
+| Balanced | 128 | 19.3M | 32% | ~2^130 PQ |
+| Full security | 256 | 38.1M | 63% | ~2^120 PQ |
 
 **Optimizations applied:**
+- **Seed-derived `a` vectors**: 99.8% storage reduction (11 bytes/gate vs 6155 bytes)
 - Wire binding PRG: 16 coefficients per keccak (320 calls vs 4096)
 - Single mod at end of inner product (vs per-term mod)
-- Batch size 128 (5 binding updates for 640 gates)
-- n=128 LBLO dimension
+- Batch size 128 (binding updates every 128 gates)
+- n=768 LBLO dimension for post-quantum security
+
+## Storage
+
+TLOS uses **seed-derived `a` vectors** - the public LWE vectors are regenerated on-chain from a circuit seed instead of being stored.
+
+| Config (n=768) | Gates | Storage | Old Format | Savings |
+|----------------|-------|---------|------------|---------|
+| Conservative | 64 | 704 bytes | 394 KB | 99.8% |
+| Balanced | 128 | 1.4 KB | 788 KB | 99.8% |
+| Full security | 256 | 2.8 KB | 1.58 MB | 99.8% |
+
+**Deployment scheme:**
+1. Deploy circuit data once via SSTORE2 (~615K gas for 256 gates)
+2. Multiple contract instances reference the shared `circuitDataPointer`
+3. Each instance deployment: ~100K gas (no data duplication)
+
+**View vs Transaction costs:**
+- `check(input)`: **Free** (view function, local simulation)
+- `reveal(input)` / `mint()`: 10.5M-38.1M gas (state-changing, executes `_evaluate()`)
 
 ## Advantage Over Simple Hash Commitments
 
@@ -67,12 +89,12 @@ Why use TLOS instead of `keccak256(secret)`? For random 256-bit secrets, keccak 
 
 | Secret Type | Keccak Attack (est.) | TLOS Attack (heuristic est.) |
 |-------------|----------------------|------------------------------|
-| Random 256-bit | ~2^256 hashes | min(2^256, ~2^98)* |
+| Random 256-bit | ~2^256 hashes | min(2^256, ~2^120)* |
 | Human password | Milliseconds | Hours-days* |
 | Range 0-100K | ~0.1 seconds | 2.8+ hours* |
 | 4-word phrase | Seconds | Weeks* |
 
-*Heuristic estimates assuming LBLO has ~2^98 PQ work factor when modeled as LWE in standard lattice estimators. See **Security Disclaimer**.
+*Heuristic estimates assuming LBLO has ~2^120-140 PQ work factor for n=768 when modeled as LWE in standard lattice estimators. See **Security Disclaimer**.
 
 **Key insight:** TLOS provides a practical way to make low-entropy secret verification expensive on EVM - no memory-hard KDF (Argon2/scrypt) exists as a precompile.
 
@@ -158,7 +180,7 @@ tlos/
 
 TLOS security is based on the **conjectured hardness of the LBLO problem** (Learning with Binary Large Offset). This is a noiseless, LWE-like construction that lacks formal reductions to standard lattice problems.
 
-- The ~2^98 PQ estimate is a **heuristic yardstick** based on modeling LBLO as LWE in lattice estimators
+- The ~2^120-140 PQ estimate (for n=768) is a **heuristic yardstick** based on modeling LBLO as LWE in lattice estimators
 - We encourage **independent cryptanalysis** of the LBLO problem
 - Attack scripts available in `scripts/lblo_attack.py`
 - **Do not use for high-value, long-lived secrets** until further analysis is available

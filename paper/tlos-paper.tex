@@ -49,7 +49,7 @@
 \begin{abstract}
 We present \tlos{} (Topology-Lattice Obfuscation for Smart contracts), a practical circuit obfuscation framework for EVM that adds inter-gate wire consistency via a full-rank linear hash (inspired by~\cite{MDS25}). \tlos{} uses a three-layer security model: a topology layer that defeats structural and statistical attacks, a lattice layer using on-chain noiseless LWE-like (LBLO) inner products that defeats semantic attacks, and a wire binding layer that binds wire values across gates to prevent mix-and-match attacks.
 
-\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ dimension and full-rank $64{\times}64$ wire binding. Control functions are hidden via LBLO ciphertexts (noiseless; security is heuristic, not based on standard LWE reductions); wire binding ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at 10.5M--38.1M gas with $n{=}768$ dimension and full-rank $64{\times}64$ wire binding. Control functions are hidden via LBLO ciphertexts (noiseless; security is heuristic, not based on standard LWE reductions); wire binding ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ We take a practical approach: \emph{resist known attack classes} through three c
 \begin{enumerate}
   \item \textbf{Layer 1 (Topology):} Structural mixing defeats structural and statistical attacks through wire selection patterns (non-pow2 distances, uniform wire usage, irregular layers). \emph{Security: heuristic, empirically validated.}
   
-  \item \textbf{Layer 2 (LBLO):} On-chain inner product computation defeats semantic attacks (RainbowTable). Control functions hidden via noiseless LWE-like ciphertexts. \emph{Security: heuristic ${\sim}2^{98}$ PQ cost for known attacks on our LBLO construction; not standard LWE (see \S\ref{sec:lblo}).}
+  \item \textbf{Layer 2 (LBLO):} On-chain inner product computation defeats semantic attacks (RainbowTable). Control functions hidden via noiseless LWE-like ciphertexts. \emph{Security: heuristic ${\sim}2^{120\text{--}140}$ PQ cost for known attacks on our LBLO construction with $n{=}768$; not standard LWE (see \S\ref{sec:lblo}).}
   
   \item \textbf{Layer 3 (Wire Binding):} Full-rank linear hash binds wire values across gate evaluations, preventing mix-and-match attacks (see \S\ref{sec:wire-binding}). \emph{Security: algebraic binding via bijective map over $\mathbb{Z}_q^{64}$ (not cryptographic hiding).}
 \end{enumerate}
@@ -113,7 +113,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \subsection{Contributions}
 
 \begin{enumerate}
-  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain LBLO (noiseless LWE-like) inner products, and a full-rank wire binding layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ binding matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 9/9 resistance in our attack evaluation matrix.
+  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain LBLO (noiseless LWE-like) inner products, and a full-rank wire binding layer. Our implementation uses $n{=}768$ LWE dimension and a $64{\times}64$ binding matrix, achieving 10.5M--38.1M gas (17--63\% of block) and 11 bytes/gate storage (seed-derived $\vec{a}$ vectors) with 9/9 resistance in our attack evaluation matrix.
   
   \item \textbf{Structural Mixing:} Wire selection algorithm defeating structural and statistical attacks through non-pow2 distances, uniform wire usage, and irregular layers. Security is heuristic and empirically validated.
   
@@ -121,7 +121,7 @@ Topology-only defenses cannot block this attack because any structural transform
   
   \item \textbf{On-Chain LBLO (LWE-like):} Control functions hidden via noiseless LWE-like ciphertexts (LBLO; see Definition~\ref{def:lblo}) with full inner product computation on-chain. No hints or shortcuts; recovering control-function bits without the secret appears to require solving LBLO.
   
-  \item \textbf{Post-Quantum Resistance (Conjectured):} Security of control-function hiding relies on the conjectured hardness of LBLO. Our ${\sim}2^{98}$ PQ estimate is based on heuristic modeling with the LWE estimator (see Table~\ref{tab:lwe-security}), not on standard LWE reductions.
+  \item \textbf{Post-Quantum Resistance (Conjectured):} Security of control-function hiding relies on the conjectured hardness of LBLO. Our ${\sim}2^{120\text{--}140}$ PQ estimate for $n{=}768$ is based on heuristic modeling with the LWE estimator (see Table~\ref{tab:lwe-security}), not on standard LWE reductions.
   
   \item \textbf{Attack Evaluation:} Empirical validation against 14 attack implementations across 6 categories.
 \end{enumerate}
@@ -132,7 +132,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \begin{itemize}
   \item Computational security based on \emph{conjectured} hardness of our noiseless LBLO construction (modeled heuristically via the LWE estimator; see Table~\ref{tab:lwe-security} for rough complexity estimates) plus empirical heuristics (topology layer)
   \item Attack resistance (9/9 in our evaluation matrix; not a universal security claim)
-  \item Practical gas costs (${\sim}8.5$M for $n{=}128$, 28\% of block limit)
+  \item Practical gas costs (10.5M--38.1M for $n{=}768$, 17--63\% of 60M block limit)
   \item Conjectured post-quantum resistance (to the extent that LBLO resists quantum attacks at our parameter sizes; no worst-case lattice reduction is known for LBLO)
   \item Public evaluation: no secret keys required to evaluate the circuit on-chain
   \item Wrong-key garbage property: attackers can simulate offline but wrong keys yield garbage outputs
@@ -172,7 +172,7 @@ Topology-only defenses cannot block this attack because any structural transform
   \item \textbf{On-chain only:} No off-chain computation or trusted servers available
   \item \textbf{No zk-SNARKs:} Proof systems unavailable, too complex, or undesirable
   \item \textbf{No private L2:} Must deploy on public L1 (Ethereum mainnet, L2 rollups)
-  \item \textbf{Gas cost is acceptable:} At 0.03 gwei, 8.5M gas $\approx$ \$0.80, negligible for most applications
+  \item \textbf{Gas cost is acceptable:} At 0.03 gwei, 10.5M--38.1M gas $\approx$ \$1--\$4, negligible for most applications
 \end{itemize}
 
 Under these constraints, \tlos{} provides a practical mechanism to make low-entropy secret verification expensive on EVM. No memory-hard KDF (Argon2, scrypt, bcrypt) exists as an EVM precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess; \tlos{} requires ${\sim}100$ms/guess, a $10^8\times$ slowdown.
@@ -229,7 +229,7 @@ Under these constraints, \tlos{} provides a practical mechanism to make low-entr
   \item \textbf{When alternatives exist:} If zk-SNARKs, private L2s, or off-chain KDFs are available and acceptable, they may be simpler.
 \end{itemize}
 
-For long-lived secrets, an adversary can analyze the circuit for arbitrarily long time. While our LBLO construction provides estimated computational security (${\sim}2^{98}$ PQ, heuristic), we do not claim this is sufficient for secrets requiring decades of protection.
+For long-lived secrets, an adversary can analyze the circuit for arbitrarily long time. While our LBLO construction provides estimated computational security (${\sim}2^{120\text{--}140}$ PQ for $n{=}768$, heuristic), we do not claim this is sufficient for secrets requiring decades of protection.
 
 %------------------------------------------------------------------------------
 \section{Preliminaries}
@@ -245,7 +245,7 @@ For dimension $n$, modulus $q$, and error distribution $\chi$, the \lwe{}$_{n,q,
 For appropriate parameters, \lwe{} is as hard as worst-case lattice problems (e.g., GapSVP, SIVP) with polynomial approximation factors.
 \end{theorem}
 
-\lwe{} is believed quantum-resistant and forms the basis for post-quantum cryptography standards including ML-KEM~\cite{FIPS203}. Note that our parameters ($n{=}128$, $q{=}65521$) are \emph{much smaller} than NIST-standardized profiles (which use $n \geq 512$). See Table~\ref{tab:lwe-security} for security estimates based on the LWE Estimator~\cite{APS15}.
+\lwe{} is believed quantum-resistant and forms the basis for post-quantum cryptography standards including ML-KEM~\cite{FIPS203}. Our deployed parameter ($n{=}768$, $q{=}65521$) exceeds NIST ML-KEM-768 dimension. See Table~\ref{tab:lwe-security} for security estimates based on the LWE Estimator~\cite{APS15}.
 
 \subsection{Compute-and-Compare Obfuscation}
 
@@ -513,18 +513,17 @@ Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) i
 \textbf{LBLO / LWE-Like Parameters:}
 \begin{itemize}
   \item Modulus: $q = 65521$ (largest 16-bit prime)
-  \item Dimension: $n = 128$ (deployed); $n \in \{16, 32\}$ for security estimates
-  \item Sample count: $m = 2560$ (4 ciphertexts $\times$ 640 gates)
+  \item Dimension: $n = 768$ (deployed); $n \in \{16, 32, 128\}$ for historical experiments
+  \item Sample count: $m = 256$--$1024$ (4 ciphertexts $\times$ 64--256 gates)
   \item Error term: \textbf{None} (deterministic encoding)
 \end{itemize}
 
 \textbf{Why no error term?} EVM requires deterministic execution; probabilistic decoding failures would break on-chain verification. Encryption is $b = \langle a, s \rangle + \mu \cdot (q/2) \mod q$ where $\mu \in \{0,1\}$ is the control-function bit. Decryption checks if $(b - \langle a,s \rangle) \mod q$ falls in $(q/4, 3q/4)$. Since there is no noise, decoding is \emph{perfect} (0\% error probability). The tradeoff: we lose standard \lwe{} semantic security guarantees but gain perfect correctness. Security relies on recovering $s$ without knowing the $\mu$ bits; the best known attack (subset guessing) requires $2^n$ work (see \S\ref{sec:lblo}).
 
-\textbf{Storage per gate:} $n \cdot 2 + 2$ bytes per ciphertext, 4 ciphertexts per gate, plus 3 bytes for pins.
+\textbf{Storage per gate (seed-derived $\vec{a}$):} With seed-derived $\vec{a}$ vectors, we store only $b$ values: 3 bytes for wire indices + 8 bytes for 4 $b$ values = \textbf{11 bytes/gate} regardless of $n$. Compare to storing full ciphertexts:
 \begin{itemize}
-  \item $n{=}16$: 139 bytes/gate, 89 KB total (640 gates)
-  \item $n{=}32$: 267 bytes/gate, 171 KB total
-  \item $n{=}128$: 1035 bytes/gate, 662 KB total
+  \item $n{=}128$ (old): 1035 bytes/gate, 662 KB total (640 gates)
+  \item $n{=}768$ (seed-derived): \textbf{11 bytes/gate}, 2.8 KB total (256 gates)
 \end{itemize}
 
 \textbf{On-chain evaluation:}
@@ -568,10 +567,11 @@ Table~\ref{tab:lwe-security} presents heuristic security estimates for our LBLO 
 \midrule
 $n{=}16$ & ${\sim}22$-bit & ${\sim}20$-bit & 0.74M & Toy parameters (experiments only) \\
 $n{=}32$ & ${\sim}51$-bit & ${\sim}46$-bit & 1.27M & Low security (experiments only) \\
-$n{=}128$ & ${\sim}203$-bit & ${\sim}98$-bit & 8.5M & Deployed parameter (production use) \\
+$n{=}128$ & ${\sim}203$-bit & ${\sim}98$-bit & 8.5M & Historical parameter (see $n{=}768$) \\
+\textbf{$n{=}768$} & \textbf{${\sim}280$-bit} & \textbf{${\sim}120$--$140$-bit} & \textbf{10.5M--38.1M} & \textbf{Deployed parameter (production use)} \\
 \bottomrule
 \end{tabular}
-\caption{LBLO security estimates (modeled as uniform-secret LWE; $q{=}65521$, $m{=}2560$, no error term). Estimates based on dual attacks in the LWE Estimator~\cite{APS15}; \textbf{heuristic} since our construction lacks noise and standard LWE reductions do not apply. Gas costs are for 64-wire/640-gate circuits; only $n{=}128$ is used on-chain in \tlos{}.}
+\caption{LBLO security estimates (modeled as uniform-secret LWE; $q{=}65521$, no error term). Estimates based on dual attacks in the LWE Estimator~\cite{APS15}; \textbf{heuristic} since our construction lacks noise and standard LWE reductions do not apply. Gas costs for $n{=}768$: 64 gates = 10.5M, 128 gates = 19.3M, 256 gates = 38.1M.}
 \end{table}
 
 \textbf{Important caveat:} The estimates in Table~\ref{tab:lwe-security} are \emph{heuristic} because our construction lacks a Gaussian error term. Standard LWE security reductions do not apply directly. The quoted ``bit-security'' numbers should be interpreted as rough complexity yardsticks based on the best known attacks, not as formal security guarantees. We validated these estimates via direct lattice attacks using fpylll/BKZ; see \S\ref{sec:attack-validation}.
@@ -829,26 +829,107 @@ For uniformly random $k$-bit secrets, $H(S) = k$, so the adversary must make at 
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lccc@{}}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-\textbf{\lwe{} Dimension} & \textbf{Security (Classical)} & \textbf{Gas} & \textbf{Block \%} \\
+\textbf{\lwe{} Dimension} & \textbf{Security (PQ)} & \textbf{Gates} & \textbf{Gas} & \textbf{Block \%} \\
 \midrule
-$n{=}16$ & ${\sim}22$-bit & 744K & 2.5\% \\
-$n{=}32$ & ${\sim}51$-bit & 1.27M & 4.2\% \\
-\textbf{$n{=}128$} & \textbf{${\sim}203$-bit} & \textbf{8.5M} & \textbf{28\%} \\
+$n{=}128$ (historical) & ${\sim}98$-bit & 640 & 8.5M & 14\% \\
+\textbf{$n{=}768$} & \textbf{${\sim}140$-bit} & 64 & 10.5M & 17\% \\
+\textbf{$n{=}768$} & \textbf{${\sim}130$-bit} & 128 & 19.3M & 32\% \\
+\textbf{$n{=}768$} & \textbf{${\sim}120$-bit} & 256 & 38.1M & 63\% \\
 \bottomrule
 \end{tabular}
-\caption{\tlos{} gas costs by \lwe{} dimension (64-wire/640-gate circuits, Tenderly-confirmed). Security estimates for uniform-secret \lwe{} (dual attack).}
+\caption{\tlos{} gas costs by configuration (Tenderly-confirmed, 60M block limit). Security estimates for uniform-secret LBLO (dual attack). Fewer gates = fewer LWE samples = higher security.}
 \end{table}
 
-\textbf{Storage:} Circuit data is stored via SSTORE2 (code-as-storage):
+\subsection{Storage Optimization: Seed-Derived $\vec{a}$ Vectors}
+
+A key optimization reduces storage by 99\%: instead of storing full LWE ciphertexts $(a, b)$, we store only the $b$ values and derive $\vec{a}$ vectors deterministically on-chain from a circuit seed.
+
+\textbf{Gate data format (optimized):}
 \begin{itemize}
-  \item $n{=}16$: 89 KB
-  \item $n{=}32$: 171 KB
-  \item $n{=}128$: 662 KB
+  \item 3 bytes: wire indices (active, control1, control2)
+  \item 8 bytes: 4 $\times$ 2-byte $b$ values (one per truth table entry)
+  \item \textbf{Total: 11 bytes/gate} (vs.\ $3 + 4(2n+2)$ bytes storing full ciphertexts)
 \end{itemize}
 
-For the paper, we use $n{=}128$ providing ${\sim}203$-bit classical/${\sim}98$-bit post-quantum security, suitable for production applications.
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Config ($n{=}768$)} & \textbf{Gates} & \textbf{Storage} & \textbf{Old Format} & \textbf{Savings} \\
+\midrule
+Conservative & 64 & 704 bytes & 394 KB & 99.8\% \\
+Balanced & 128 & 1.4 KB & 788 KB & 99.8\% \\
+Full security & 256 & 2.8 KB & 1.58 MB & 99.8\% \\
+\bottomrule
+\end{tabular}
+\caption{Storage comparison: seed-derived $\vec{a}$ vs.\ storing full ciphertexts.}
+\end{table}
+
+During evaluation, $\vec{a}$ vectors are regenerated via:
+\[
+\vec{a}_{g,t} = H(\mathsf{circuitSeed} \| \text{``A''} \| g \| t) \mod q
+\]
+where $g$ is the gate index and $t \in \{0,1,2,3\}$ is the truth table index.
+
+\subsection{Deployment Scheme}
+
+\textbf{Shared circuit deployment:} Circuit data can be deployed once and reused across multiple contract instances. We illustrate with an NFT mystery box where trait generation logic is hidden:
+
+\begin{enumerate}
+  \item \textbf{Deploy circuit data (one-time):} Store gate topology and $b$ values via SSTORE2. For 256 gates at $n{=}768$: ${\sim}2.8$ KB, fits in single SSTORE2 contract (${\sim}615$K gas).
+  
+  \item \textbf{Deploy NFT contract:} Contract references the shared \texttt{circuitDataPointer}. Instance deployment costs ${\sim}100$K gas (no circuit data duplication).
+  
+  \item \textbf{Mint with hidden traits:} Each \texttt{mint()} call internally evaluates the obfuscated circuit to compute traits from \texttt{(tokenId, entropy)}.
+\end{enumerate}
+
+\subsection{View vs.\ Transaction Costs}
+
+The \texttt{check()} function is a \texttt{view}---it can be called locally via \texttt{eth\_call} with \textbf{no gas payment}. Only state-changing operations require on-chain gas:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Function} & \textbf{Type} & \textbf{Gas Cost} & \textbf{Notes} \\
+\midrule
+\texttt{check(input)} & view & \textbf{Free} & Local simulation \\
+\texttt{commit(hash)} & tx & ${\sim}45$K & Store commitment \\
+\texttt{reveal(input)} / \texttt{mint()} & tx & 38.1M & Executes \texttt{\_evaluate()} \\
+SSTORE2 deploy & tx & ${\sim}615$K & One-time, shared \\
+\bottomrule
+\end{tabular}
+\caption{Gas costs by operation type ($n{=}768$, 256 gates).}
+\end{table}
+
+\textbf{Implications:}
+\begin{itemize}
+  \item \textbf{Attackers} can brute-force \texttt{check()} locally without paying gas, but each guess still incurs ${\sim}100$ms computational cost (the LBLO slowdown).
+  \item \textbf{Legitimate users} pay 38.1M gas only once when executing the state-changing operation (\texttt{reveal()}, \texttt{mint()}, etc.).
+\end{itemize}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Config ($n{=}768$)} & \textbf{Gates} & \textbf{Evaluation Gas} & \textbf{Block \%} \\
+\midrule
+Conservative & 64 & 10.5M & 17\% \\
+Balanced & 128 & 19.3M & 32\% \\
+Full security & 256 & 38.1M & 63\% \\
+\bottomrule
+\end{tabular}
+\caption{Gas costs with seed-derived $\vec{a}$ vectors (Tenderly-confirmed, 60M block limit).}
+\end{table}
+
+\textbf{Security vs.\ gas tradeoff:} Fewer gates = fewer LWE samples = higher security but less circuit mixing. For $n{=}768$:
+\begin{itemize}
+  \item 64 gates (256 samples): ${\sim}140$+ bit security, 10.5M gas
+  \item 128 gates (512 samples): ${\sim}130$+ bit security, 19.3M gas  
+  \item 256 gates (1024 samples): ${\sim}120$+ bit security, 38.1M gas
+\end{itemize}
 
 %------------------------------------------------------------------------------
 \section{Attack Evaluation}
@@ -992,15 +1073,17 @@ contract TLOSKitties is ERC721 {
 \centering
 \begin{tabular}{@{}lccc@{}}
 \toprule
-\textbf{Variant} & \textbf{Operation} & \textbf{Gas ($n{=}128$)} & \textbf{\% of 30M} \\
+\textbf{Variant} & \textbf{Operation} & \textbf{Gas ($n{=}768$)} & \textbf{\% of 60M} \\
 \midrule
-\tlos{} & \texttt{check()} & 8.5M & 28\% \\
+\tlos{} (64 gates) & \texttt{check()} & 10.5M & 17\% \\
+\tlos{} (128 gates) & \texttt{check()} & 19.3M & 32\% \\
+\tlos{} (256 gates) & \texttt{check()} & 38.1M & 63\% \\
 \midrule
-All & \texttt{commit()} & 47K & 0.16\% \\
+All & \texttt{commit()} & 47K & 0.08\% \\
 All & \texttt{reveal()} & varies & varies \\
 \bottomrule
 \end{tabular}
-\caption{Gas costs on 64-wire/640-gate circuits with $n{=}128$ \lwe{} dimension. Tenderly-measured.}
+\caption{Gas costs with $n{=}768$ \lwe{} dimension and seed-derived $\vec{a}$ vectors. Tenderly-measured.}
 \end{table}
 
 \subsection{Commit-Reveal Protocol}
@@ -1064,7 +1147,7 @@ where $\mathsf{wires}_k$ is the packed wire state after batch $k$, and addition 
 
 The full \tlos{} system has three security components:
 \begin{itemize}
-  \item \textbf{LWE} for control function hiding (${\sim}98$-bit post-quantum for $n{=}128$)
+  \item \textbf{LBLO} for control function hiding (${\sim}120$--$140$-bit post-quantum for $n{=}768$)
   \item \textbf{Wire binding} for wire consistency (algebraic binding)
   \item \textbf{Hash preimage} for unlocking (${\sim}256$-bit)
 \end{itemize}
@@ -1085,14 +1168,14 @@ function check(bytes32 x) returns (bool) {
 }
 \end{lstlisting}
 
-This costs ${\sim}50$K gas and provides 256-bit preimage resistance. Why use \tlos{}'s 8.5M gas for ${\sim}98$-bit \lwe{} security?
+This costs ${\sim}50$K gas and provides 256-bit preimage resistance. Why use \tlos{}'s 10.5M--38.1M gas for ${\sim}120$--$140$-bit LBLO security?
 
 \subsection{When Hash-Compare Suffices}
 
 For simple ``guess the secret'' predicates, \textbf{hash-compare is equivalent or better}:
 \begin{itemize}
-  \item Lower gas (${\sim}50$K vs 8.5M)
-  \item Higher security (256-bit vs 98-bit PQ)
+  \item Lower gas (${\sim}50$K vs 10.5M--38.1M)
+  \item Higher security (256-bit vs 120--140-bit PQ)
   \item Simpler implementation
 \end{itemize}
 
@@ -1194,9 +1277,9 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
 \subsection{Practical Concerns}
 
 \begin{enumerate}
-  \item \textbf{Gas costs:} \tlos{} with $n{=}128$ \lwe{} requires ${\sim}8.5$M gas (28\% of block limit). This is practical for high-value, infrequent operations.
+  \item \textbf{Gas costs:} \tlos{} with $n{=}768$ requires 10.5M--38.1M gas (17--63\% of 60M block limit). This is practical for high-value, infrequent operations.
   
-  \item \textbf{Storage:} Circuit data requires 662 KB (SSTORE2) for $n{=}128$. Deployment costs are dominated by SSTORE2 writes.
+  \item \textbf{Storage:} With seed-derived $\vec{a}$ vectors, circuit data requires only 11 bytes/gate (2.8 KB for 256 gates). Deployment costs are minimal.
   
   \item \textbf{Circuit size:} Larger circuits provide better security but higher gas costs. The 64-wire/640-gate configuration is a trade-off.
   
@@ -1225,11 +1308,11 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
 
 \begin{itemize}
   \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns. Empirically validated.
-  \item \textbf{LBLO layer (heuristic):} On-chain inner product computation hides control functions, defeating semantic attacks. \emph{Estimated} ${\sim}2^{98}$ post-quantum cost for known attacks with $n{=}128$; this is a heuristic estimate based on the LBLO problem (\S\ref{sec:lblo}), not a reduction to standard LWE.
+  \item \textbf{LBLO layer (heuristic):} On-chain inner product computation hides control functions, defeating semantic attacks. \emph{Estimated} ${\sim}2^{120\text{--}140}$ post-quantum cost for known attacks with $n{=}768$; this is a heuristic estimate based on the LBLO problem (\S\ref{sec:lblo}), not a reduction to standard LWE.
   \item \textbf{Wire binding layer:} Full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, preventing mix-and-match attacks. Security: algebraic binding.
 \end{itemize}
 
-\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on conjectured LBLO hardness; the wire binding layer provides algebraic consistency. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at 10.5M--38.1M gas with $n{=}768$ and 64--256 gates. Security is based on conjectured LBLO hardness; the wire binding layer provides algebraic consistency. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
 
 \textbf{Key contributions:}
 \begin{itemize}
@@ -1240,7 +1323,7 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
   \item Honest comparison with hash-compare baseline (Section~\ref{sec:hash-compare})
 \end{itemize}
 
-\textbf{Limitations:} Topology security is heuristic, not proven. LBLO security is conjectured based on empirical attack analysis, not proven via reduction to standard assumptions. Gas costs (${\sim}8.5$M) may be prohibitive for frequent operations. We do not recommend current parameters for high-value, long-lived secrets until further independent cryptanalysis validates the LBLO hardness conjecture.
+\textbf{Limitations:} Topology security is heuristic, not proven. LBLO security is conjectured based on empirical attack analysis, not proven via reduction to standard assumptions. Gas costs (10.5M--38.1M) may be prohibitive for frequent operations. We do not recommend current parameters for high-value, long-lived secrets until further independent cryptanalysis validates the LBLO hardness conjecture.
 
 \textbf{Future Work:}
 \begin{itemize}
@@ -1300,7 +1383,7 @@ Validation on 1000 random circuits ($w=64$ wires, $g=640$ gates) using our imple
 \centering
 \begin{tabular}{@{}lc@{}}
 \toprule
-\textbf{Attack} & \textbf{\tlos{} ($n{=}128$)} \\
+\textbf{Attack} & \textbf{\tlos{} ($n{=}768$)} \\
 \midrule
 Compression & 0\% \\
 PatternMatch & 0\% \\
