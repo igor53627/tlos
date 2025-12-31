@@ -10,7 +10,7 @@ TLOS provides three-layer security for on-chain circuit obfuscation:
 
 1. **Topology layer**: Structural mixing defeats structural/statistical attacks (heuristic)
 2. **LBLO layer**: Noiseless LWE-like inner products hide control functions (heuristic ~2^98 PQ)
-3. **Wire binding layer**: Full-rank 64x64 linear hash binds wire values across gates (algebraic binding)
+3. **Wire binding layer**: Full-rank 64x64 public linear map binds wire values across gates (algebraic binding, not cryptographic hashing)
 
 The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.iacr.org/2025/307) but is **not** subspace-evasive in the formal sense - it is a public bijective linear map providing algebraic binding, not cryptographic hiding.
 
@@ -19,7 +19,7 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 | Layer | Purpose | Security |
 |-------|---------|----------|
 | **T**opology | Anti-attack wire patterns (non-pow2 distances, uniform usage) | Heuristic (empirical) |
-| **L**attice (LBLO) | Control function hiding via noiseless LWE-like inner products | Heuristic (~2^98 PQ) |
+| **L**attice (LBLO) | Control function hiding via noiseless LWE-like inner products | Heuristic (~2^98 PQ LBLO) |
 | **O**bfuscation | Circuit representation hiding | Heuristic |
 | Wire **B**inding | Inter-gate wire consistency via full-rank linear hash | Algebraic binding |
 
@@ -53,7 +53,7 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 
 | Variant | Config | Gas | % of Block | Security (Heuristic) |
 |---------|--------|-----|------------|----------------------|
-| **TLOS (n=128, full-rank 64x64 binding)** | 64w/640g | ~8.5M | 28% | ~2^98 PQ (LBLO) |
+| **TLOS (n=128, full-rank 64x64 binding)** | 64w/640g | ~8.5M | 28% | Heuristic ~2^98 PQ (LBLO) |
 
 **Optimizations applied:**
 - Wire binding PRG: 16 coefficients per keccak (320 calls vs 4096)
@@ -63,14 +63,16 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 
 ## Advantage Over Simple Hash Commitments
 
-Why use TLOS instead of `keccak256(secret)`? For random 256-bit secrets, keccak is simpler and sufficient. However, TLOS excels for **low-entropy secrets** and **multi-bit payloads**.
+Why use TLOS instead of `keccak256(secret)`? For random 256-bit secrets, keccak is simpler and sufficient. However, TLOS is **designed to help** for **low-entropy secrets** and **multi-bit payloads**, assuming the heuristic LBLO hardness holds.
 
-| Secret Type | Keccak Attack | TLOS Attack |
-|-------------|---------------|-------------|
-| Random 256-bit | 2^256 hashes | min(2^256, 2^98) |
-| Human password | Milliseconds | Hours-days |
-| Range 0-100K | 0.1 seconds | 2.8+ hours |
-| 4-word phrase | Seconds | Weeks |
+| Secret Type | Keccak Attack (est.) | TLOS Attack (heuristic est.) |
+|-------------|----------------------|------------------------------|
+| Random 256-bit | ~2^256 hashes | min(2^256, ~2^98)* |
+| Human password | Milliseconds | Hours-days* |
+| Range 0-100K | ~0.1 seconds | 2.8+ hours* |
+| 4-word phrase | Seconds | Weeks* |
+
+*Heuristic estimates assuming LBLO has ~2^98 PQ work factor when modeled as LWE in standard lattice estimators. See **Security Disclaimer**.
 
 **Key insight:** TLOS provides a practical way to make low-entropy secret verification expensive on EVM - no memory-hard KDF (Argon2/scrypt) exists as a precompile.
 
@@ -129,14 +131,14 @@ forge script scripts/BenchmarkTLOS.s.sol --rpc-url "$TENDERLY_RPC" --broadcast -
 ```
 tlos/
 ├── contracts/
-│   ├── TLOSLWE.sol         # Main contract (LBLO + wire binding)
+│   ├── TLOSLWE.sol         # Main contract (LBLO + wire binding; legacy "LWE" name)
 │   ├── interfaces/
 │   └── legacy/
 │       └── TLOSKeccak.sol  # Classical only, deprecated
 ├── src/                     # Rust implementation
 │   ├── circuit.rs          # Circuit/gate structures
-│   ├── lwe.rs              # LBLO encoding
-│   ├── seh_lwe.rs          # Wire binding (matches Solidity)
+│   ├── lwe.rs              # LBLO (noiseless LWE-like) encoding
+│   ├── seh_lwe.rs          # Wire binding implementation (legacy "SEH/LWE" filename)
 │   ├── generator.rs        # Deployment generator
 │   └── bin/
 │       └── generate_tlos.rs # CLI binary
@@ -145,7 +147,7 @@ tlos/
 │   └── lblo_attack*.py     # LBLO attack analysis scripts
 ├── docs/
 │   ├── security.md         # Security model
-│   └── seh-wire-binding.md # Wire binding details
+│   └── seh-wire-binding.md # Wire binding details (legacy "SEH" name)
 ├── paper/
 │   ├── tlos-paper.pdf      # Full paper (source of truth)
 │   └── tlos.pdf            # Short paper
