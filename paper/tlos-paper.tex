@@ -432,7 +432,7 @@ The topology layer is a reversible circuit mixing structure designed to defeat s
 
 \subsection{Topology Attack Resistance}
 
-The topology layer defeats structural and statistical attacks:
+The topology layer provides empirical resistance against structural and statistical attacks in our evaluation:
 
 \begin{table}[h]
 \centering
@@ -447,10 +447,10 @@ Statistical (Chi-squared) & Statistical & Topology & Uniform wire usage \\
 DiagonalCorrelation & Statistical & Topology & 64+ wires, irregular layers \\
 \bottomrule
 \end{tabular}
-\caption{Topology layer defeats structural and statistical attacks.}
+\caption{Topology layer resists structural and statistical attacks in our evaluation. Success should be read as ``no break found in our test suite,'' not ``provably secure.''}
 \end{table}
 
-\textbf{Key insight:} Unlike butterfly or derangement topologies that only rearrange gates, the topology layer has anti-attack properties \emph{built into wire selection}. The wire selection algorithm is designed specifically to defeat known attack heuristics.
+\textbf{Key insight:} Unlike butterfly or derangement topologies that only rearrange gates, the topology layer has anti-attack properties \emph{built into wire selection}. The wire selection algorithm is designed specifically to resist known attack heuristics. \textbf{Important:} This is a closed-world evaluation against our implemented attacks. We cannot rule out future attacks that exploit structural patterns we have not anticipated. The topology layer should be viewed as raising the bar for structural analysis, not providing formal security guarantees.
 
 %------------------------------------------------------------------------------
 \section{The LBLO (LWE-Like) Layer}
@@ -544,9 +544,9 @@ Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) i
 \tlos{} provides security through three complementary layers:
 
 \begin{enumerate}
-  \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns that break attack heuristics. Security is \emph{empirical}, validated against our attack suite but not formally proven.
+  \item \textbf{Topology layer (heuristic):} Resists structural and statistical attacks in our evaluation through wire selection patterns that break known attack heuristics. Security is \emph{empirical} (no successful breaks found in testing), validated against our attack suite but not formally proven. Success should be interpreted as ``no break found,'' not ``provably secure.''
   
-  \item \textbf{LBLO layer (heuristic):} Defeats semantic attacks by hiding control functions via LBLO ciphertexts with on-chain inner products. Security is \emph{conjectured}, based on LBLO hardness (see Table~\ref{tab:lwe-security} and \S\ref{sec:lblo}).
+  \item \textbf{LBLO layer (heuristic):} Resists semantic attacks by hiding control functions via LBLO ciphertexts with on-chain inner products. Security is \emph{conjectured}, based on LBLO hardness (see Table~\ref{tab:lwe-security} and \S\ref{sec:lblo}).
   
   \item \textbf{Wire binding layer (algebraic):} Binds wire values across gates via full-rank linear hash, preventing mix-and-match attacks. Security is \emph{algebraic binding}, not cryptographic hiding.
 \end{enumerate}
@@ -734,7 +734,7 @@ The Learning with Binary Large Offset problem (Definition~\ref{def:lblo}) is com
 
 \begin{assumption}[Topology Empirical Security]
 \label{asm:topology}
-The topology layer's wire selection algorithm defeats the structural and statistical attacks in our evaluation matrix. This is validated empirically, not proven.
+The topology layer's wire selection algorithm resists the structural and statistical attacks in our evaluation matrix. This is validated empirically via testing (no successful breaks found in 1000+ trials), not proven via formal reduction. Future attacks exploiting unanticipated structural patterns may exist.
 \end{assumption}
 
 \subsection{Main Theorem}
@@ -747,13 +747,13 @@ Under Assumption~\ref{asm:lblo} (LBLO hardness), Assumption~\ref{asm:topology} (
 \begin{proof}
 We consider each attack class:
 
-\textbf{Structural attacks (3/6):} Compression, PatternMatch, and Structural (Butterfly) attacks rely on detecting patterns in wire selection. The topology layer uses non-pow2 distances and random CF cycling, breaking these patterns. \emph{Empirically validated} (Assumption~\ref{asm:topology}).
+\textbf{Structural attacks (3/6):} Compression, PatternMatch, and Structural (Butterfly) attacks rely on detecting patterns in wire selection. The topology layer uses non-pow2 distances and random CF cycling, which \emph{no known attack in our suite successfully exploits}. \emph{Empirically validated} (Assumption~\ref{asm:topology}), but we cannot prove that more sophisticated structural attacks do not exist.
 
-\textbf{Statistical attacks:} Statistical (Chi-squared) and DiagonalCorrelation attacks rely on non-uniform wire usage and input-output correlation. The topology layer enforces uniform wire usage and uses 64+ wires with irregular layers. \emph{Empirically validated} (Assumption~\ref{asm:topology}).
+\textbf{Statistical attacks:} Statistical (Chi-squared) and DiagonalCorrelation attacks rely on non-uniform wire usage and input-output correlation. The topology layer enforces uniform wire usage and uses 64+ wires with irregular layers, which \emph{our implemented attacks fail to exploit}. \emph{Empirically validated} (Assumption~\ref{asm:topology}) against our test distributions.
 
 \textbf{Semantic attacks:} RainbowTable requires subcircuit evaluation. The LBLO layer hides control functions via ciphertexts with on-chain inner products. Recovering CFs requires solving LBLO (Assumption~\ref{asm:lblo}).
 
-Therefore, all 9 attack classes in our matrix are defeated under the stated assumptions. \emph{This is not a claim of universal security.}
+Therefore, no attack in our 9-class evaluation matrix successfully extracts secrets under the stated assumptions. \emph{This should be read as ``no break found in our test suite,'' not ``secure against all possible attacks.'' We cannot rule out future attack vectors that exploit structural or statistical properties we have not tested.}
 \end{proof}
 
 \subsection{Post-Quantum Security}
@@ -787,6 +787,39 @@ For predicates $P(x) = [f(x) = s]$ where $s$ has min-entropy $k$ bits, classical
 \end{observation}
 
 For honeypots with 256-bit secrets, even quantum brute-force is infeasible ($2^{128}$ queries).
+
+\subsection{Oracle Leakage Analysis}
+\label{sec:oracle-leakage}
+
+We now provide a more formal analysis of information leakage through the 1-bit on-chain oracle interface.
+
+\textbf{Oracle interface:} The on-chain contract exposes a single function \texttt{check(x)} that returns 1 if $x = \mathsf{secret}$ and 0 otherwise. Let $\mathcal{O}$ denote this oracle.
+
+\textbf{Information-theoretic bound:} For a secret $s$ with min-entropy $k$ bits, each oracle query $\mathcal{O}(x)$ reveals at most 1 bit of information about $s$. In the worst case, an adaptive adversary making $q$ queries learns at most $q$ bits.
+
+\textbf{Shannon entropy analysis:} Let $H(S)$ denote the entropy of the secret distribution. After $q$ queries $\{x_1, \ldots, x_q\}$ with responses $\{r_1, \ldots, r_q\}$, the conditional entropy satisfies:
+\[
+H(S \mid r_1, \ldots, r_q) \geq H(S) - q
+\]
+For uniformly random $k$-bit secrets, $H(S) = k$, so the adversary must make at least $k$ queries to fully determine $s$ (information-theoretically).
+
+\textbf{Practical leakage:} For point functions $P(x) = [x = s]$ where $s$ is uniformly distributed over a domain of size $2^k$:
+\begin{itemize}
+  \item Each \emph{negative} response ($\mathcal{O}(x_i) = 0$) rules out exactly one candidate: $s \neq x_i$
+  \item Expected queries to find $s$ via random search: $\Theta(2^k)$
+  \item Best-case adaptive strategy (if structure is known): still $\Theta(2^k)$ for uniformly random $s$
+\end{itemize}
+
+\textbf{Comparison with multi-bit oracles:} If the oracle returned intermediate wire states or multi-bit outputs, leakage would be dramatically higher. For example, an oracle returning the Hamming distance $|x \oplus s|$ would enable binary search, reducing attack cost from $\Theta(2^k)$ to $\Theta(k)$ queries.
+
+\textbf{Side-channel considerations (out of scope):} Our analysis assumes the oracle leaks \emph{only} the 1-bit output. In practice, EVM-level side channels (gas usage, storage access patterns, timing) may leak additional information. Mitigating these is outside the scope of \tlos{} and would require:
+\begin{itemize}
+  \item Constant-time/constant-gas implementations (challenging in EVM)
+  \item Oblivious RAM-style storage access (prohibitively expensive)
+  \item Differential privacy techniques (not applicable to deterministic predicates)
+\end{itemize}
+
+\textbf{Open problem:} A fully formal leakage analysis would model the adversary's knowledge as a probability distribution over the secret space and quantify how oracle responses update this distribution. For uniform secrets and memoryless oracles, the 1-bit bound is tight. For structured secrets or stateful adversaries (e.g., learning the circuit structure over many queries), tighter bounds may be possible. We leave this to future work and welcome formal analysis by the cryptographic community.
 
 %------------------------------------------------------------------------------
 \section{Gas Costs and Deployment}
