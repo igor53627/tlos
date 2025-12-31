@@ -85,7 +85,7 @@ There are two SEH instantiations in this repository:
 |----------|-------|
 | LWE dimension | n=128 |
 | Matrix size | 64×64 (full-rank, trivial kernel) |
-| Security basis | Collision resistance of random linear map |
+| Security basis | Binding via injective linear map (public, invertible) |
 | Post-quantum security | ~98-bit |
 | Gas cost | ~8.5M for 640 gates |
 | Deployment | Deployable on L1 (28% of block) |
@@ -106,7 +106,7 @@ Where:
 
 ### Why Full-Rank 64×64?
 
-An earlier design used an 8×64 matrix, which has a 56-dimensional nullspace—many inputs collide. A reviewer correctly noted this undermines collision resistance. With a full-rank 64×64 matrix, the kernel is trivial (only the zero vector), so any two distinct 64-bit inputs produce distinct outputs with overwhelming probability over the random matrix.
+An earlier design used an 8×64 matrix, which has a 56-dimensional nullspace—many inputs could produce the same output. A reviewer correctly noted this undermines binding. With a full-rank 64×64 matrix, the kernel is trivial (only the zero vector), so any two distinct 64-bit inputs produce distinct outputs—this provides **deterministic binding**, not collision resistance in the hash-function sense (the map is publicly invertible).
 
 ### Per-Batch Updates
 
@@ -162,7 +162,7 @@ For the **post-quantum TLOS profile**, only the LWE-based SEH is considered:
 | Component | Security Basis | Post-Quantum | Level |
 |-----------|----------------|--------------|-------|
 | CF hiding | LWE hardness (n=128) | Yes | ~98-bit |
-| SEH binding | LWE + subspace evasion | Yes | ~98-bit |
+| SEH binding | LWE-based linear binding | Yes | ~98-bit |
 | Unlock mechanism | Hash preimage | Conjectured* | ~256-bit |
 
 *Assumes conservative Grover-style reduction for the hash component.
@@ -206,7 +206,7 @@ For ~128-bit PQ security, n>=256 would be needed, which requires either L2 deplo
 
 ## Gas / Practicality Note
 
-TLOSLWE with n=128 and full-rank 64×64 SEH costs **~8.5M gas** for a 64w/640g configuration (28% of an Ethereum L1 block).
+TLOSLWE with n=128 and full-rank 64×64 SEH costs **~8.5M gas** for a 64w/640g configuration (28% of an Ethereum L1 block). This is based on Tenderly benchmarks; the contract's `estimatedGas()` function returns a conservative upper bound for off-chain tooling.
 
 **Optimizations applied:**
 - SEH PRG: 16 coefficients per keccak (320 calls vs 4096)

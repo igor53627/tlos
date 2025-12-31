@@ -1,0 +1,394 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\geometry{a4paper,top=25mm,bottom=25mm,left=19mm,right=19mm,columnsep=8mm}
+
+\input{macros}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  upquote=true,
+}
+
+\title{\tlos{}: Topology-Lattice Obfuscation for Smart Contracts}
+\author{
+\textit{Anonymous Submission}
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present \tlos{}, a practical circuit obfuscation framework for EVM smart contracts that resists specific attack classes (structural, semantic, mix-and-match) with practical gas costs.
+
+\tlos{} uses a three-layer security model: (1)~topology mixing complicates structural attacks via non-power-of-2 wire distances and uniform wire usage, (2)~noiseless LWE-like (LBLO) inner products computed on-chain hide gate control functions, and (3)~a full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, ensuring that an adversary cannot mix outputs from different execution paths.
+
+\tlos{} achieves ${\sim}8.5$M gas with $n{=}128$ LBLO (LWE-like) dimension and full-rank $64{\times}64$ wire binding. Security estimates (${\sim}2^{98}$ PQ) are based on heuristic modeling of our noiseless LBLO construction; see \S\ref{sec:lwe-params} for full parameterization. Target applications include predicates with eventually-expiring secrets, particularly \emph{low-entropy secrets} (passwords, phrases, small ranges) where \tlos{} provides significant advantage over simple hash commitments by making each guess computationally expensive.
+\end{abstract}
+
+%------------------------------------------------------------------------------
+\section{Introduction}
+%------------------------------------------------------------------------------
+
+Smart contracts are fully transparent. This conflicts with applications requiring hidden logic: honeypots, MEV-resistant execution, sealed-bid auctions, and private thresholds.
+
+Indistinguishability obfuscation (iO) from lattices~\cite{MDS25} achieves strong security but with impractical overhead. We take a different approach: \emph{practical obfuscation} that resists known attack classes through three complementary layers:
+
+\begin{center}
+\framebox{\parbox{0.85\columnwidth}{
+\textbf{Three-Layer Security Model:}
+\begin{enumerate}
+\item \textbf{Topology:} Structural mixing complicates structural/statistical attacks. \emph{Security: heuristic.}
+\item \textbf{LBLO (LWE-like, noiseless):} On-chain inner products hide control functions. \emph{Security: heuristic estimate ${\sim}2^{98}$ PQ for our LBLO parameters; not standard LWE (see \S\ref{sec:lwe-params}).}
+\item \textbf{Wire Binding:} Full-rank linear hash binds wire values across gates, preventing mix-and-match. \emph{Security: algebraic binding (bijective map).}
+\end{enumerate}
+}}
+\end{center}
+
+\subsection{Contributions}
+
+\begin{enumerate}
+\item \textbf{\tlos{} Framework:} Three-layer obfuscation for EVM using lattice assumptions (${\sim}8.5$M gas with $n{=}128$).
+\item \textbf{Full-Rank Wire Binding:} Inter-gate wire binding via on-chain $64{\times}64$ matrix-vector products. Inspired by~\cite{MDS25} but simplified: a public bijective map providing algebraic binding, not cryptographic hiding.
+\item \textbf{Per-Batch Updates:} Gas-efficient binding (128-gate batches, 5 updates for 640 gates).
+\item \textbf{PRG Optimization:} Derive 16 matrix coefficients per keccak call (320 calls vs 4096).
+\item \textbf{Use Case Analysis:} When circuit obfuscation provides advantage over simple hash commitments.
+\end{enumerate}
+
+%------------------------------------------------------------------------------
+\section{Advantage Over Hash Commitments}
+\label{sec:advantage}
+%------------------------------------------------------------------------------
+
+A natural question: why not simply use \texttt{keccak256(secret)}? For random 256-bit secrets, keccak is indeed simpler. However, \tlos{} excels for \emph{low-entropy secrets} and \emph{multi-bit payloads}.
+
+\begin{table}[h]
+\centering
+\scriptsize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Secret Type} & \textbf{Keccak} & \textbf{\tlos{}} \\
+\midrule
+Random 256-bit & $2^{256}$ hashes & $\min(2^{256}, 2^{98})$\textsuperscript{$\dagger$} \\
+Human password (10\textsuperscript{6}) & $<$1 ms & $\sim$17 min \\
+Range 0--100K & $<$0.1 ms & $\sim$2.8 hours \\
+4-word phrase (2048\textsuperscript{4}) & $\sim$18 sec & $\sim$5 years \\
+\bottomrule
+\end{tabular}
+\caption{Offline brute-force cost comparison. \textsuperscript{$\dagger$}For high-entropy secrets, \tlos{} security is bounded by the conjectured hardness of our LBLO construction (heuristic estimate ${\sim}2^{98}$ with $n{=}128$; see \S\ref{sec:lwe-params}). Assumptions: keccak at $10^9$ hashes/s, \tlos{} at 100\,ms/guess.}
+\label{tab:comparison}
+\end{table}
+
+\subsection{Deployment Constraints}
+
+\tlos{} is designed for environments where:
+\begin{itemize}
+\item \textbf{On-chain only:} No off-chain computation or trusted servers
+\item \textbf{No zk-SNARKs:} Proof systems unavailable or too complex
+\item \textbf{No private L2:} Must deploy on public L1
+\item \textbf{Gas is cheap:} At 0.03 gwei, 8.5M gas $\approx$ \$0.80
+\end{itemize}
+
+Under these constraints, \tlos{} provides a practical way to make low-entropy secret verification expensive on EVM---no memory-hard KDF (Argon2/scrypt) exists as an EVM precompile.
+
+\subsection{Why Not Keccak?}
+
+\textbf{Low-entropy secrets.} Keccak can be brute-forced at ${\sim}1$ns/guess. \tlos{} transforms each guess into an expensive LBLO-style (noiseless LWE-like) inner-product computation (${\sim}100$ms/guess), a $10^8\times$ slowdown.
+
+\textbf{Multi-bit payloads.} With keccak, a payload requires separate ciphertext $\mathsf{Enc}_k(\mathsf{payload})$ alongside $\mathsf{keccak256}(k)$. Attackers who crack $k$ decrypt offline. In \tlos{}, payload is \emph{fused} into the circuit.
+
+\textbf{Hidden structure.} Keccak reveals what you're checking (``it's a hash comparison''). \tlos{} hides the check structure---attackers don't know if it's one condition or ten.
+
+\subsection{Practical Use Cases}
+
+\textbf{DeFi:}
+\begin{itemize}
+\item \emph{Hidden liquidation thresholds:} MEV bots can't front-run if they don't know your trigger price
+\item \emph{Private stop-loss/take-profit:} Strategy parameters hidden inside circuit
+\item \emph{Dark limit orders:} Price bands obfuscated from sandwich attacks
+\end{itemize}
+
+\textbf{Wallet Recovery \& Inheritance:}
+\begin{itemize}
+\item \emph{Human-memorable recovery codes:} 6-word phrase protects wallet; keccak would be instant to crack, \tlos{} takes hours
+\item \emph{On-chain wills:} Family passphrase unlocks inheritance; structure (who gets what) is hidden
+\item \emph{Dead man's switch:} Liveness check + secret claim code, both obfuscated
+\end{itemize}
+
+\textbf{Gaming \& NFTs:}
+\begin{itemize}
+\item \emph{On-chain puzzles:} Low-entropy answers protected from GPU brute-force
+\item \emph{Sealed-bid auctions:} Bid values from small domain can't be dictionary-attacked
+\item \emph{Mystery box traits:} Generation logic hidden; can't predict rare mints
+\end{itemize}
+
+\textbf{When to use keccak:} Random 256-bit secrets with no payload and no structure to hide.
+
+%------------------------------------------------------------------------------
+\section{Construction}
+%------------------------------------------------------------------------------
+
+\subsection{Full-Rank Wire Binding}
+
+We bind wire values across gates using a \emph{full-rank} linear hash: $H(x) = Ax \mod q$ where $A \in \mathbb{Z}_q^{64 \times 64}$ is derived from \texttt{circuitSeed} and gate index. This is inspired by~\cite{MDS25} but is \emph{not} subspace-evasive in the formal sense---it is simply a public bijective linear map providing algebraic binding.
+
+\textbf{Why 64$\times$64?} A full-rank $64 \times 64$ matrix over $\mathbb{Z}_q$ has trivial kernel (only the zero vector), so $H$ is a bijection on $\mathbb{Z}_q^{64}$: every accumulator state has a unique preimage. Smaller matrices (e.g., $8 \times 64$) have large nullspaces where many inputs collide, undermining binding.
+
+\textbf{Threat model (mix-and-match):} Without wire binding, an adversary could evaluate different branches of the circuit and splice together wire values from distinct execution paths to synthesize a ``fake'' trace. The full-rank hash forces all wires in a batch to be combined into a 1024-bit accumulator; any deviation changes the accumulator in a way that cannot be repaired without recomputing a full, consistent trace.
+
+\textbf{Note:} This is a public random linear map over $\mathbb{Z}_q$ (no noise, no secret). Security is \emph{integrity/binding}, not cryptographic collision resistance: once an accumulator value is fixed, there is (for full-rank $A$) a single consistent wire vector that can produce it.
+
+\begin{lstlisting}
+// Optimized: 16 coefficients per keccak (320 calls vs 4096)
+function _wireBindingHash(uint256 input, uint256 gateIdx) 
+    internal view returns (uint256[4] memory output) {
+  assembly {
+    for { let row := 0 } lt(row, 64) { row := add(row, 1) } {
+      let rowSeed := keccak256(seed, gateIdx, row)  // 1 per row
+      let sum := 0
+      for { let blockIdx := 0 } lt(col, nWires) { ... } {
+        let blockDigest := keccak256(rowSeed, blockIdx)  // 16 coefs
+        // Extract 16 u16 coefficients from blockDigest
+        for { let k := 0 } lt(k, 16) { k := add(k, 1) } {
+          let aij := mod(and(shr(mul(k,16), blockDigest), 0xFFFF), q)
+          if bitVal { sum := add(sum, aij) }
+        }
+      }
+      // Pack into output
+    }
+  }
+}
+\end{lstlisting}
+
+\subsection{Per-Batch Updates}
+
+For gas efficiency, the consistency hash is updated every 128 gates:
+\[
+\mathsf{hashAcc}_{k+1} = H(\mathsf{hashAcc}_k \oplus \mathsf{wires}, \mathsf{batchEnd}_k)
+\]
+
+This provides 5 hash updates for 640 gates. Combined with the PRG optimization (16 coefficients per keccak instead of 1), total wire binding overhead is reduced by ${\sim}25\times$ compared to naive implementation.
+
+\subsection{LWE-Like Parameterization}
+\label{sec:lwe-params}
+
+Our control-function hiding uses an LWE-like construction with the following parameters:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Dimension $n$ & 128 \\
+Modulus $q$ & 65521 (largest 16-bit prime) \\
+Sample count $m$ & 2560 (4 ciphertexts $\times$ 640 gates) \\
+Secret distribution & Uniform over $\mathbb{Z}_q^n$ (Keccak-derived) \\
+Public vector $a$ & Uniform over $\mathbb{Z}_q^n$ \\
+Error term $e$ & \textbf{None} (see below) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Encoding (no noise):} Encryption is deterministic: $b = \langle a, s \rangle + \mu \cdot (q/2) \mod q$, where $\mu \in \{0,1\}$ encodes the control-function bit. Decryption uses threshold $q/4$: if $(b - \langle a,s \rangle) \mod q$ falls in $(q/4, 3q/4)$, output 1; else 0.
+
+\textbf{Why no error term?} EVM requires deterministic execution---probabilistic decoding failures would break on-chain verification. The tradeoff: we get \emph{perfect correctness} (0\% decoding error) but lose standard \lwe{} semantic security guarantees. Security relies on the difficulty of recovering $s$ without knowing the $\mu$ bits; subset attacks require $2^n$ guesses (see below).
+
+\textbf{Security estimate (heuristic):} Our implementation does \emph{not} add an independent error term, so this is not standard LWE. The ${\sim}2^{98}$ PQ estimate is based on heuristic modeling as LWE$(n{=}128, q{=}65521, m{=}2560)$ using the lattice estimator~\cite{APS15}. \textbf{This should be interpreted as a rough complexity yardstick, not a formal security guarantee.} Standard LWE security reductions (to GapSVP, SIVP) do not apply. Security relies on the empirical observation that the best known attack (subset guessing) requires $2^n$ work.
+
+\textbf{Binary-Offset Hardness:} Our construction is ``Learning with Binary Large Offset'' (LBLO): $b_i = \langle a_i, s \rangle + \mu_i \cdot (q/2) \mod q$ where $\mu_i \in \{0,1\}$. We implemented and tested 9 attack classes (\texttt{scripts/lblo\_attack.py}):
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Attack} & \textbf{Result} & \textbf{Notes} \\
+\midrule
+Naive brute-force & FAIL & $2^{2560}$ (all $\mu$)---infeasible \\
+Statistical distinguishing & FAIL & $b$ uniform, $\chi^2{<}100$ \\
+Lattice BDD & FAIL & Error norm $1.17{\times}10^6 \gg$ heuristic $19$ \\
+Linear algebra & FAIL & Requires knowing $\mu$ \\
+Subset guessing & FAIL & Still $2^n$ per subset \\
+Hybrid (guess $k$ bits) & FAIL & Need $2^n$ guesses minimum \\
+Meet-in-middle & FAIL & $s$ shared, not applicable \\
+Actual BKZ-50 & FAIL & Finds only trivial vectors \\
+$q/2$ structure & FAIL & No exploitable correlation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Exhaustive attack validation:} We ran multi-hour exhaustive searches on two servers to measure attack scaling:
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+$n$ & Rate (ops/s) & Full $2^n$ time & Extrapolated $n{=}128$ \\
+\midrule
+16 & 1,500 & 44s & N/A \\
+20 & 1,100 & 16min & N/A \\
+24 & 820 & 5.7h & N/A \\
+128 & N/A & N/A & $10^{28}$ years \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Attack parallelizes trivially, but even with $10^9$ machines: $10^{19}$ years.
+
+\noindent\textbf{Caveat:} Absence of known attacks $\neq$ proven security. The ${\sim}2^{98}$ estimate is a \emph{heuristic} lower bound based on the best known attacks, not a formal security guarantee. Standard LWE reductions do not apply to our noiseless construction. We encourage independent cryptanalysis of the LBLO problem; our attack suite is available at \texttt{scripts/lblo\_attack.py}.
+
+%------------------------------------------------------------------------------
+\section{Security}
+\label{sec:security}
+%------------------------------------------------------------------------------
+
+\begin{table}[h]
+\centering
+\scriptsize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Component} & \textbf{Basis} & \textbf{Est.\ Security} \\
+\midrule
+CF hiding & LBLO (noiseless LWE-like, $n{=}128$) & ${\sim}2^{98}$ PQ (heuristic) \\
+Wire binding & Full-rank 64$\times$64 linear map & Algebraic binding \\
+Topology & Heuristic & Empirical (\S\ref{sec:topology-exp}) \\
+\bottomrule
+\end{tabular}
+\caption{Security profile. LWE estimate is heuristic (see \S\ref{sec:lwe-params}). Wire binding provides algebraic binding via trivial kernel.}
+\label{tab:security}
+\end{table}
+
+We estimate ${\sim}2^{98}$ post-quantum cost against the underlying LBLO instances by heuristically modeling them as LWE$(n{=}128, q{=}65521, m{=}2560)$ in standard lattice estimators. This should be interpreted as a rough complexity \emph{yardstick}, not a formal LWE-based security guarantee (see \S\ref{sec:lwe-params}). This security level is suitable for:
+\begin{itemize}
+\item Medium-term secrets (weeks--months)
+\item Production applications with moderate value
+\item Real-world deployment scenarios
+\end{itemize}
+
+For higher security (${\sim}2^{128}$ PQ), $n \geq 256$ would be needed (requires a high-throughput L2 or dedicated precompiles).
+
+\subsection{What Wire Binding Provides}
+
+\begin{itemize}
+\item \textbf{Mix-and-match detection:} Any attempt to evaluate gates with inconsistent inputs will, except with negligible probability, yield a final accumulator that does not match the expected value.
+\item \textbf{Execution trace binding:} Full evaluation history is committed.
+\item \textbf{Lattice-style construction:} Uses the same linear algebra as the LBLO layer for design uniformity; its security role is \emph{integrity/binding}: for a fixed full-rank $A$, each accumulator state has a unique preimage in $\mathbb{Z}_q^{64}$ under $H$.
+\end{itemize}
+
+\subsection{Limitations}
+
+\tlos{} does \emph{not} provide:
+\begin{itemize}
+\item Semantic security against black-box evaluation (not targeted; we resist specific attack classes only)
+\item Full iO (indistinguishability obfuscation) (not targeted)
+\end{itemize}
+
+%------------------------------------------------------------------------------
+\section{Implementation}
+%------------------------------------------------------------------------------
+
+\textbf{Contracts:} \texttt{TLOSLWE.sol} (${\sim}$350 lines Solidity)
+
+\textbf{Rust generator:} Produces circuit data matching Solidity evaluation exactly. Outputs 662,400 bytes for 640 gates with $n{=}128$.
+
+\textbf{Gas costs (measured):}
+\begin{itemize}
+\item \textbf{TLOS-LWE ($n{=}128$, full-rank wire binding)}: ${\sim}8.5$M gas (28\% of block)
+\end{itemize}
+
+\textbf{Optimizations applied:}
+\begin{itemize}
+\item PRG optimization: 16 coefficients per keccak (320 calls vs 4096 per update)
+\item Single \texttt{mod} at end of inner product (vs per-term)
+\item Batch size 128 (5 binding updates for 640 gates)
+\item $n{=}128$ LWE dimension for ${\sim}2^{98}$ PQ security
+\end{itemize}
+
+%------------------------------------------------------------------------------
+\section{Topology Mixing Experiments}
+\label{sec:topology-exp}
+%------------------------------------------------------------------------------
+
+We empirically evaluated topology mixing against simple structural attacks on 100 random 64-wire/640-gate circuits.
+
+\textbf{Attacker model:} Adversary sees the full obfuscated circuit graph (wire indices, gate structure) but not the LWE-encrypted control functions. Goal: identify semantic structure (e.g., comparators, adders) or reduce circuit complexity.
+
+\textbf{Attacks tested:}
+\begin{itemize}
+\item \textbf{Degree analysis:} Identify high-fanout ``hub'' wires that might carry semantic signals.
+\item \textbf{Pattern matching:} Search for known subcircuit patterns (XOR chains, comparator structures).
+\item \textbf{Wire distance heuristic:} Exploit power-of-2 distances between control wires.
+\end{itemize}
+
+\textbf{Results:}
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Attack} & \textbf{Baseline} & \textbf{With Mixing} \\
+\midrule
+Hub wire identification & 78\% & 12\% \\
+Pattern match (XOR chain) & 91\% & 8\% \\
+Power-of-2 distance exploit & 100\% & 0\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Topology mixing uses non-power-of-2 wire distances and uniform wire usage, which eliminates the power-of-2 distance exploit entirely and significantly reduces hub/pattern detection rates. These results are empirical; we do not claim formal security.
+
+\subsection{Layer Ablation}
+
+We evaluated attack resistance with different layer combinations:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Configuration} & \textbf{Structural} & \textbf{Semantic} & \textbf{Mix-Match} \\
+\midrule
+Baseline (no obfuscation) & 0/3 & 0/1 & 0/1 \\
+Topology only & 3/3 & 0/1 & 0/1 \\
+Topology + LBLO & 3/3 & 1/1 & 0/1 \\
+Topology + LBLO + Wire Binding & 3/3 & 1/1 & 1/1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key findings:} (1)~Topology alone defeats structural attacks but not semantic (RainbowTable) attacks. (2)~LBLO is necessary to hide control functions from semantic analysis. (3)~Wire binding is necessary to prevent mix-and-match---without it, an attacker can evaluate gates with inconsistent wire values.
+
+%------------------------------------------------------------------------------
+\section{Conclusion}
+%------------------------------------------------------------------------------
+
+\tlos{} is a practical circuit obfuscation framework for EVM using lattice-inspired assumptions, achieving estimated ${\sim}2^{98}$ post-quantum security (heuristic, see \S\ref{sec:lwe-params}) at ${\sim}8.5$M gas with $n{=}128$ and full-rank wire binding. The three-layer design (topology + LBLO (LWE-like) control function hiding + full-rank wire binding) provides resistance against structural, statistical, semantic, and mix-and-match attacks.
+
+Key insight: \tlos{} provides significant advantage over simple hash commitments for \emph{low-entropy secrets} by making each guess computationally expensive. Its value is in making low-entropy guesses expensive under EVM constraints and enabling richer obfuscated logic.
+
+Future work includes higher security parameters ($n \geq 256$), succinct verification via zkSNARK/STARK, and formal security analysis of batch wire binding.
+
+\begin{thebibliography}{9}
+\bibitem{MDS25} Ma, Dai, Shi. ``Indistinguishability Obfuscation from Lattices in the Quantum Random Oracle Model.'' ePrint 2025/307.
+\bibitem{Regev05} Regev. ``On Lattices, Learning with Errors, Random Linear Codes, and Cryptography.'' STOC 2005.
+\bibitem{GKW17} Goyal, Koppula, Waters. ``Lockable Obfuscation.'' FOCS 2017.
+\bibitem{APS15} Albrecht, Player, Scott. ``On the Concrete Hardness of Learning with Errors.'' J.\ Math.\ Cryptol.\ 2015.
+\end{thebibliography}
+
+\end{document}

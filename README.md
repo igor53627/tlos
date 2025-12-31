@@ -2,7 +2,7 @@
 
 **TLO + Ma-Dai-Shi LiO wire binding for inter-gate consistency.**
 
-TLOS is a **post-quantum (PQ) obfuscation prototype**. The only SEH construction is **LWE-based SEH (TLOSLWE.sol)**.
+TLOS is a **post-quantum (PQ) obfuscation prototype**. The only SEH construction in the **post-quantum profile** is **LWE-based SEH (`TLOSLWE.sol`)**. A legacy keccak-based SEH (`TLOSKeccak.sol`) remains in `contracts/legacy/` for benchmarks.
 
 ## What is TLOS?
 
@@ -127,7 +127,8 @@ tlos/
 │   └── bin/
 │       └── generate_tlos.rs # CLI binary
 ├── scripts/
-│   └── BenchmarkTLOS.s.sol # Tenderly benchmark
+│   ├── BenchmarkTLOS.s.sol # Tenderly benchmark
+│   └── lblo_attack*.py     # Attack analysis scripts
 ├── docs/
 │   ├── security.md         # Security model
 │   └── seh-wire-binding.md # SEH details

@@ -48,26 +48,35 @@ The theoretical construction uses:
 
 **Gas cost: Impractical (~44M gas for 256-wire circuit)**
 
-### Our Keccak-Based SEH (Practical)
+### TLOS SEH Implementations
 
-For on-chain deployment, we use keccak256-based hashing:
+**LWE-based SEH (TLOSLWE - Post-Quantum):**
+
+Uses a full-rank 64×64 matrix-vector product:
 
 ```solidity
-// Initialize from circuit seed
-bytes32 sehAcc = keccak256(abi.encodePacked(circuitSeed, "SEH-INIT", wires));
+// H(wires) = A * wires mod q  (64-element output, 1024 bits)
+// A is derived from circuitSeed and batchIdx
+sehAcc = _sehHash(wires, 0);  // Initialize
 
-// Per-gate update
-for (uint32 i = 0; i < numGates; i++) {
-    // ... evaluate gate ...
-    sehAcc = keccak256(abi.encodePacked(sehAcc, i, wires));
-}
-
-// Final verification
-bytes32 finalSeh = keccak256(abi.encodePacked(sehAcc, finalWires, numGates));
-require(finalSeh == expectedSehHash, "SEH mismatch");
+// Per-batch update (every 128 gates)
+uint256 combined = sehAcc[0] ^ sehAcc[1] ^ sehAcc[2] ^ sehAcc[3] ^ wires;
+sehAcc = _sehHash(combined, batchEnd);
 ```
 
-**Gas cost: ~95K for 640-gate circuit (1.75x overhead vs base TLO-CaC)**
+**Gas cost: ~8.5M for 640 gates (28% of block)**
+
+**Keccak-based SEH (TLOSKeccak - Legacy, NOT PQ-secure):**
+
+```solidity
+// Initialize
+bytes32 sehAcc = keccak256(abi.encodePacked(input, "SEH-INIT", wires));
+
+// Per-batch update (every 64 gates)
+sehAcc = keccak256(abi.encodePacked(sehAcc, batchEnd, wires));
+```
+
+**Gas cost: ~2.6M for 640 gates (8.6% of block)**
 
 ## Security Properties
 
@@ -77,7 +86,7 @@ require(finalSeh == expectedSehHash, "SEH mismatch");
 |----------|-------------|----------|
 | Mix-and-match attack | Possible | Prevented |
 | Execution trace binding | None | Cryptographic |
-| s-equivalence proof | Heuristic | Formal (with caveats) |
+| s-equivalence proof | Heuristic | Heuristic (aligned with Ma-Dai-Shi) |
 
 ### What SEH Does NOT Provide
 
@@ -95,33 +104,34 @@ Eval2: x'[0..k] -> h'_k
 
 If `x[0..k] == x'[0..k]`, then `h_k == h'_k`.
 
-This is provable for keccak-SEH (collision resistance) and for LWE-SEH (subspace evasion).
+For LWE-SEH with full-rank matrix, this follows from injectivity (deterministic binding). For keccak-SEH, this relies on collision resistance of keccak256.
 
 ## Gas Comparison (Tenderly Measured)
 
 | Scheme | Config | Gas | % of 30M Block | Notes |
 |--------|--------|-----|----------------|-------|
-| TLO-LWE-64 (Base) | 64w/640g | **2,576,882** | 8.6% | LWE only, no SEH |
-| TLO-LiO-Keccak | 64w/640g | **2,589,372** | 8.6% | +keccak SEH binding |
-| TLO-LiO-LWE | 64w/640g | **3,290,236** | 11.0% | +full LWE SEH |
+| TLOSLWE (n=128) | 64w/640g | **~8.5M** | 28% | Full-rank 64x64 SEH, ~98-bit PQ |
+| TLOSKeccak | 64w/640g | **~2.6M** | 8.6% | Keccak SEH, NOT PQ-secure |
 
 ### Key Findings
 
-1. **Keccak SEH adds only ~12K gas (0.5% overhead)** - Much cheaper than theoretical estimate
-2. **LWE SEH adds ~713K gas (27.7% overhead)** - Still practical, under block limit
-3. **Both variants are deployable** - Neither exceeds 30M gas limit
+1. **TLOSLWE uses ~8.5M gas** - Deployable on L1 (28% of block)
+2. **PRG optimization reduces overhead** - 320 keccak calls per SEH update (vs 4096 naive)
+3. **Batch SEH (128 gates)** - 5 updates for 640 gates balances security and gas
 
-### Why Actual Gas < Theoretical Estimate?
+### Why TLOSLWE Gas Increased?
 
-The theoretical estimate assumed per-gate SEH updates. In practice:
-- Keccak SEH: Only 1 final hash (not per-gate)
-- LWE SEH: Simplified matrix derivation via keccak PRG
+Upgrade to n=128 LWE dimension for ~98-bit PQ security:
+- 128-element inner products (vs 64)
+- Full-rank 64x64 matrix (vs previous 8x64)
 
 ## Architecture
 
+*Conceptual diagram (per-gate SEH); actual implementation uses 128-gate batches for gas efficiency.*
+
 ```
 +------------------------------------------------------------------+
-|                     TLO-LiO Architecture                          |
+|                     TLOS Architecture                              |
 +------------------------------------------------------------------+
 |                                                                   |
 |  Input x                                                          |
@@ -148,25 +158,32 @@ The theoretical estimate assumed per-gate SEH updates. In practice:
 
 ## Contracts
 
-### TLOHoneypotLiO.sol
+### TLOSLWE.sol (Post-Quantum)
 
-Located at: `tlo/contracts/TLOHoneypotLiO.sol`
+Located at: `contracts/TLOSLWE.sol`
 
-Key additions over TLOHoneypotCaC:
-- `expectedSehHash`: Final SEH accumulator value (set at deploy)
-- `checkWithSeh()`: Returns both validity and SEH hash (for debugging)
-- Per-gate SEH accumulator update in evaluation loop
+Key features:
+- `expectedSehOutput`: 4 x uint256 for 1024-bit SEH output
+- `checkWithSeh()`: Returns both validity and SEH output (for debugging)
+- 128-gate batch SEH updates for gas efficiency
+- n=128 LWE dimension (~98-bit PQ security)
 
-### Deployment
+### TLOSKeccak.sol (Legacy, Deprecated)
+
+Located at: `contracts/legacy/TLOSKeccak.sol`
+
+Classical-only variant using keccak256 for SEH. **NOT post-quantum secure.**
+
+### Deployment (TLOSLWE)
 
 ```solidity
 constructor(
-    bytes memory _circuitData,
+    address _circuitDataPointer,
     uint8 _numWires,
     uint32 _numGates,
-    bytes32 _circuitSeed,
     bytes32 _expectedOutputHash,
-    bytes32 _expectedSehHash,      // NEW: SEH binding
+    bytes32 _circuitSeed,
+    uint256[4] memory _expectedSehOutput,  // 64 x u16 packed into 4 x uint256
     uint256 _secretExpiry
 ) payable
 ```
@@ -193,19 +210,21 @@ constructor(
 
 ## Comparison to Ma-Dai-Shi
 
-| Aspect | Ma-Dai-Shi | TLO-LiO |
-|--------|------------|---------|
-| SEH construction | FHE Merkle + LWE matrix | Keccak256 chain |
-| Security proof | Formal (s-equivalence) | Heuristic + collision resistance |
-| Gas cost | Impractical | ~95K (practical) |
+| Aspect | Ma-Dai-Shi | TLOS |
+|--------|------------|------|
+| SEH construction | FHE Merkle + LWE matrix | LWE full-rank 64x64 (TLOSLWE) |
+| Security proof | Formal (s-equivalence) | Heuristic + LWE hardness |
+| Gas cost | Impractical | ~8.5M (practical on L1) |
 | Trapdoor extraction | Yes (for debugging) | No (not needed on-chain) |
 | iO claim | Yes (quasi-linear) | No (representation hiding only) |
+| PQ Security | Yes | Yes (~98-bit with n=128) |
 
 ## Limitations
 
-1. **Keccak-SEH is weaker than LWE-SEH**: Relies on hash collision resistance, not LWE hardness
-2. **No trapdoor mode**: Cannot extract specific bits without full evaluation
-3. **Still point-function only**: SEH doesn't expand predicate expressiveness
+1. **Keccak-SEH is NOT post-quantum**: Relies on hash collision resistance (~64-bit PQ via Grover)
+2. **SEH is binding, not hiding**: The linear map is publicly invertible
+3. **No trapdoor mode**: Cannot extract specific bits without full evaluation
+4. **Still point-function only**: SEH doesn't expand predicate expressiveness
 
 ## Open Questions for Reviewer
 
@@ -217,10 +236,10 @@ constructor(
 
 ## Files
 
-- Contract: [TLOHoneypotLiO.sol](../contracts/TLOHoneypotLiO.sol)
-- Gas estimate: [lio_gas_estimate.rs](../examples/lio_gas_estimate.rs)
-- SEH module: [src/seh.rs](../../src/seh.rs)
-- LiO module: [src/lio.rs](../../src/lio.rs)
+- PQ Contract: [TLOSLWE.sol](../contracts/TLOSLWE.sol)
+- Legacy Contract: [TLOSKeccak.sol](../contracts/legacy/TLOSKeccak.sol)
+- SEH module: [src/seh_lwe.rs](../src/seh_lwe.rs)
+- LWE module: [src/lwe.rs](../src/lwe.rs)
 
 ---
 
