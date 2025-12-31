@@ -32,7 +32,16 @@ N = 128    # LWE dimension (deployed)
 M = 2560   # number of samples (4 ciphertexts * 640 gates)
 
 def derive_secret(seed: bytes, n: int) -> np.ndarray:
-    """Derive uniform secret s from seed (mimics Keccak expansion)."""
+    """
+    Derives a deterministic pseudorandom secret vector of length n from a seed by expanding the seed with repeated SHA3-256 digests.
+    
+    Parameters:
+    	seed (bytes): Seed material used to deterministically generate the secret.
+    	n (int): Number of secret elements to produce.
+    
+    Returns:
+    	np.ndarray: 1-D array of length n (dtype int64) with entries in the range 0..Q-1 representing the secret.
+    """
     s = np.zeros(n, dtype=np.int64)
     for chunk_idx in range(n // 16 + 1):
         h = sha3_256(seed + chunk_idx.to_bytes(8, 'big')).digest()
@@ -45,13 +54,22 @@ def derive_secret(seed: bytes, n: int) -> np.ndarray:
 
 def generate_lblo_instance(n: int, m: int, seed: bytes) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Generate LBLO instance.
+    Generate an LBLO instance (A, b) with a derived secret and random binary offsets.
+    
+    The function seeds the PRNG from the first four bytes of `seed`, derives the ground-truth secret `s`
+    from `seed`, samples a random matrix A and a binary offset vector mu, and computes ciphertexts
+    b = (A @ s + mu*(Q//2)) mod Q.
+    
+    Parameters:
+        n (int): Dimension of the secret vector `s`.
+        m (int): Number of samples / rows in `A` and length of `b` and `mu`.
+        seed (bytes): Seed used to derive `s` and to initialize the random generator (first 4 bytes).
     
     Returns:
-        A: m x n matrix of random vectors
-        b: m-vector of ciphertexts
-        s: n-vector secret (ground truth)
-        mu: m-vector of binary offsets (ground truth)
+        A (np.ndarray): m-by-n matrix with entries in [0, Q).
+        b (np.ndarray): Length-m vector of ciphertexts mod Q.
+        s (np.ndarray): Length-n ground-truth secret derived from `seed`.
+        mu (np.ndarray): Length-m binary vector of offsets (0 or 1).
     """
     np.random.seed(int.from_bytes(seed[:4], 'big'))
     
@@ -67,8 +85,22 @@ def generate_lblo_instance(n: int, m: int, seed: bytes) -> Tuple[np.ndarray, np.
 
 def attack_brute_force_partial(A: np.ndarray, b: np.ndarray, num_guesses: int = 1000) -> dict:
     """
-    Try random guesses for mu and check if linear system is consistent.
-    This demonstrates the hardness - even partial brute force fails.
+    Performs randomized partial brute-force guesses of the offset bits and checks linear consistency for each guess.
+    
+    Attempts up to `num_guesses` random guesses for a small prefix of the mu vector, adjusts the corresponding entries of `b` by the guessed q/2 offsets, and checks whether the resulting prefix of equations would be consistent (by inspecting the induced linear subproblem). This function is a lightweight demonstrator that records the number of guesses and elapsed time but does not attempt full secret recovery; it reports a summary dictionary describing the attempt.
+    
+    Parameters:
+        A (np.ndarray): The m-by-n public matrix of the LBLO instance.
+        b (np.ndarray): The length-m syndrome vector (mod Q) produced by the instance.
+        num_guesses (int): Maximum number of random mu-prefix guesses to try.
+    
+    Returns:
+        dict: Summary of the attack attempt with keys:
+            - "attack": identifier string "brute_force_partial".
+            - "guesses_tried": number of guesses performed.
+            - "time_seconds": elapsed wall-clock time for the attempts.
+            - "success": `False` (this routine does not recover the secret).
+            - "note": human-readable note about brute-force complexity.
     """
     m, n = A.shape
     
@@ -99,11 +131,19 @@ def attack_brute_force_partial(A: np.ndarray, b: np.ndarray, num_guesses: int = 
 
 def attack_statistical_distinguishing(A: np.ndarray, b: np.ndarray, s_true: np.ndarray) -> dict:
     """
-    Test if b values leak information about mu through statistical analysis.
+    Assess whether the observed b values leak information about the offset bits mu using chi-squared uniformity tests on b and b mod q/2.
     
-    Theory: For uniform s, <a,s> mod q is uniform. Adding mu*(q/2) shifts
-    the distribution but doesn't change its uniformity. Thus b values
-    don't reveal which samples have mu=0 vs mu=1.
+    Performs 100-bin histograms of b and b mod (q/2), computes chi-squared statistics against the uniform expected counts, and classifies each distribution as "uniform" when the chi-squared is below a threshold (150). Returns a summary dictionary including the chi-squared values, uniformity flags, and a human-readable note.
+    
+    Returns:
+        dict: Summary of the statistical distinguishing attempt containing:
+            - "attack": string identifier "statistical_distinguishing".
+            - "b_appears_uniform": `true` if full b histogram appears uniform, `false` otherwise.
+            - "b_mod_half_uniform": `true` if b mod q/2 histogram appears uniform, `false` otherwise.
+            - "chi_squared_full": chi-squared statistic for the full b histogram (float).
+            - "chi_squared_mod_half": chi-squared statistic for b mod q/2 (float).
+            - "success": `false` (this function reports statistics; it does not perform a constructive attack).
+            - "note": short explanatory string.
     """
     m, n = A.shape
     q_half = Q // 2
@@ -137,11 +177,25 @@ def attack_statistical_distinguishing(A: np.ndarray, b: np.ndarray, s_true: np.n
 
 def attack_lattice_embedding_analysis(A: np.ndarray, b: np.ndarray, n: int, m: int) -> dict:
     """
-    Analyze why lattice embedding attacks fail.
+    Estimate whether a lattice embedding (BDD) attack is feasible against the given LBLO instance.
     
-    Standard BDD: find short (s, e) such that A*s + e = b.
-    Our case: e = mu * (q/2), norm ~ sqrt(m/2) * (q/2) ~ 10^6
-    This is NOT short relative to lattice determinant.
+    Computes the expected Euclidean norm of the additive offset vector e = mu*(Q/2), a heuristic shortest-vector scale (Gaussian heuristic) for the relevant lattice, and a simple feasibility predicate that compares the error norm to the Gaussian heuristic.
+    
+    Parameters:
+        A (np.ndarray): The m-by-n public matrix (used only to reflect dimensions).
+        b (np.ndarray): The length-m public vector (unused in the heuristic computation).
+        n (int): LWE dimension (secret length).
+        m (int): Number of samples / equations.
+    
+    Returns:
+        dict: Summary of the lattice-embedding feasibility check containing:
+            - "attack": string identifier "lattice_embedding".
+            - "error_norm": Euclidean norm estimated for e = mu*(Q/2).
+            - "gaussian_heuristic": estimated scale of the shortest lattice vector used for comparison.
+            - "log2_lattice_det": base-2 logarithm of the lattice determinant estimate used.
+            - "bdd_feasible": `true` if the estimated error norm is smaller than the Gaussian heuristic, `false` otherwise.
+            - "success": always `false` (this function performs only a feasibility estimate).
+            - "note": brief human-readable remark comparing the two norms.
     """
     q_half = Q // 2
     
@@ -170,8 +224,27 @@ def attack_lattice_embedding_analysis(A: np.ndarray, b: np.ndarray, n: int, m: i
     }
 
 def mod_inverse(a: int, m: int) -> int:
-    """Compute modular inverse using extended Euclidean algorithm."""
+    """
+    Compute the modular multiplicative inverse of a modulo m.
+    
+    Parameters:
+        a (int): Integer whose inverse is sought.
+        m (int): Modulus (must be greater than 0).
+    
+    Returns:
+        int or None: The inverse of `a` modulo `m` in the range `0` to `m-1`, or `None` if no inverse exists (i.e., `gcd(a, m) != 1`).
+    """
     def extended_gcd(a, b):
+        """
+        Compute the greatest common divisor of two integers and the Bézout coefficients.
+        
+        Parameters:
+            a (int): First integer.
+            b (int): Second integer.
+        
+        Returns:
+            tuple[int, int, int]: A triple (g, x, y) where g is gcd(a, b) and x, y are integers satisfying a*x + b*y == g.
+        """
         if a == 0:
             return b, 0, 1
         gcd, x1, y1 = extended_gcd(b % a, a)
@@ -185,7 +258,12 @@ def mod_inverse(a: int, m: int) -> int:
     return (x % m + m) % m
 
 def solve_mod_q(A: np.ndarray, b: np.ndarray, q: int) -> Optional[np.ndarray]:
-    """Solve A*x = b mod q using Gaussian elimination over Z_q."""
+    """
+    Solve a square linear system A * x = b over the integer ring Z_q and return a modular solution when one exists.
+    
+    Returns:
+        x (np.ndarray): Solution vector of length n with entries in 0..q-1 if a unique solution is found; `None` if A is not square or dimensions mismatch, if the system is singular modulo q, or if a required modular inverse does not exist.
+    """
     n = A.shape[0]
     if A.shape[1] != n or len(b) != n:
         return None
@@ -225,8 +303,22 @@ def solve_mod_q(A: np.ndarray, b: np.ndarray, q: int) -> Optional[np.ndarray]:
 
 def attack_linear_algebra_wrong_mu(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, mu_true: np.ndarray) -> dict:
     """
-    Demonstrate that wrong mu guesses give inconsistent/wrong s.
-    Uses proper modular arithmetic over Z_q.
+    Check whether solving the modular linear system with the correct mu (and with a random wrong mu) recovers the true secret.
+    
+    Parameters:
+        A (np.ndarray): m×n public matrix of the LBLO instance.
+        b (np.ndarray): Length-m public vector (A @ s + mu*(Q//2)) mod Q.
+        s_true (np.ndarray): Ground-truth secret vector of length n.
+        mu_true (np.ndarray): Ground-truth binary offset vector of length m.
+    
+    Returns:
+        result (dict): Summary of the test with keys:
+            - "attack": name of the attack ("linear_algebra").
+            - "correct_mu_recovers_s": `true` if solving the first n equations with `mu_true` recovers `s_true`, `false` otherwise.
+            - "wrong_mu_recovers_s": `true` if solving the first n equations with a random wrong mu recovers `s_true`, `false` otherwise.
+            - "mu_bits_different": number of differing bits between `mu_true` and the random mu used.
+            - "success": always `false` (this routine only demonstrates consistency behavior).
+            - "note": short explanation of the outcome.
     """
     m, n = A.shape
     
@@ -269,8 +361,24 @@ def attack_linear_algebra_wrong_mu(A: np.ndarray, b: np.ndarray, s_true: np.ndar
 def attack_subset_guess(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, mu_true: np.ndarray, 
                         guess_count: int = 10) -> dict:
     """
-    Try guessing small subsets of mu and checking consistency.
-    """
+                        Attempt to recover the secret by guessing small subsets of the offset bits mu and checking which guesses produce a consistent solution.
+                        
+                        Parameters:
+                            A (np.ndarray): m-by-n public matrix of the LBLO instance.
+                            b (np.ndarray): Length-m public vector of instances with q/2 offsets.
+                            s_true (np.ndarray): Ground-truth secret (used for validation).
+                            mu_true (np.ndarray): Ground-truth offset bits (used for validation).
+                            guess_count (int): Number of random subsets of equations to sample and attempt guesses on.
+                        
+                        Returns:
+                            dict: A summary of the attack attempt containing:
+                                - "attack": name of the attack ("subset_guess").
+                                - "subsets_tried": number of random subsets sampled.
+                                - "guesses_per_subset": number of mu assignments tried per subset (sampling cap).
+                                - "successes": number of times the true secret was recovered (integer).
+                                - "success": `True` if at least one successful recovery occurred, `False` otherwise.
+                                - "note": short human-readable note about estimated search complexity.
+                        """
     m, n = A.shape
     successes = 0
     
@@ -323,17 +431,23 @@ def attack_subset_guess(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, mu_tru
 def attack_hybrid_lattice(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, 
                           mu_true: np.ndarray, k_guess: int = 4) -> dict:
     """
-    Hybrid attack: guess k bits of mu, then solve reduced problem.
-    
-    Strategy: 
-    1. Pick k equations
-    2. Try all 2^k combinations of mu for those equations
-    3. For each guess, solve the linear system
-    4. Check if solution is consistent with remaining equations
-    
-    Cost: 2^k * (n^3 for solve) * (m-k checks)
-    Optimal k balances guess cost vs lattice reduction cost.
-    """
+                          Perform a hybrid attack by guessing k bits of the offset vector `mu` for the first k equations and attempting to recover the secret `s` by solving the resulting modular linear system.
+                          
+                          Tries all 2^k combinations for the first k equations; for each guess the function adjusts those b entries by subtracting guessed mu*(Q/2), attempts to form an n×n system (requires k >= n in this implementation), solves it modulo Q, and verifies any recovered candidate against all m equations allowing for offsets equal to 0 or Q/2. Counts successful recoveries and measures runtime.
+                          
+                          Parameters:
+                              k_guess (int): Number of mu bits to guess (clamped to min(k_guess, m, n) inside the function).
+                          
+                          Returns:
+                              dict: Summary of the attack with keys:
+                                  - "attack": name of the attack ("hybrid_lattice").
+                                  - "k_guessed": number of bits actually guessed.
+                                  - "attempts": number of mu assignments tried.
+                                  - "successes": number of successful recoveries where recovered s equals s_true.
+                                  - "time_seconds": elapsed wall-clock time for the attack.
+                                  - "success": `True` if any recovery succeeded, `False` otherwise.
+                                  - "note": human-readable note about required guess cost.
+                          """
     m, n = A.shape
     successes = 0
     attempts = 0
@@ -397,20 +511,16 @@ def attack_hybrid_lattice(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
 def attack_meet_in_middle(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
                           mu_true: np.ndarray, half_bits: int = 8) -> dict:
     """
-    Meet-in-the-middle attack on mu.
-    
-    Strategy:
-    1. Split first 2*half_bits equations into two halves
-    2. For left half: compute A_left * s for all possible s (infeasible for large s)
-    
-    Actually, MITM on mu doesn't help because:
-    - We need to find mu such that b - mu*(q/2) = A*s is consistent
-    - Even if we split mu, we still need to find s
-    - MITM would work if we could split computation, but s is shared
-    
-    This attack is NOT directly applicable to LBLO.
-    We implement a variant: MITM on small subset of mu to verify consistency.
-    """
+                          Demonstrates a limited meet-in-the-middle attempt over a small subset of the mu bits and reports that MITM is not applicable to recover the secret for LBLO parameters.
+                          
+                          Returns:
+                              result (dict): Dictionary with keys:
+                                  - "attack": attack identifier string.
+                                  - "k_bits": number of mu bits considered.
+                                  - "table_size": size of the left-half lookup table used.
+                                  - "success": `False` to indicate the attack did not recover the secret.
+                                  - "note": explanatory message describing why MITM is infeasible (s is shared across equations and would require storing or enumerating all possible secrets).
+                          """
     m, n = A.shape
     k = min(half_bits * 2, m, 16)  # Limit to avoid memory explosion
     
@@ -439,11 +549,33 @@ def attack_meet_in_middle(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
 def attack_bkz_reduction(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
                          mu_true: np.ndarray, block_size: int = 20) -> dict:
     """
-    Actual BKZ lattice reduction attack.
-    
-    Build the Kannan embedding lattice and run BKZ to find short vectors.
-    For LBLO, the "error" is not small, so this should fail.
-    """
+                         Attempt a BKZ-based lattice reduction attack using a Kannan embedding to detect short lattice vectors that would reveal the secret.
+                         
+                         Builds a Kannan-embedding basis from (A, b), runs LLL followed by BKZ (when available), and inspects the shortest vector norm to determine whether a vector encoding (e = b - A*s, s, 1) was found. For the LBLO construction the embedding error e = mu*(Q/2) is large, so the attack is expected to fail on realistic parameters; this function runs a small-instance demonstration and reports metrics.
+                         
+                         Returns:
+                             dict: A result dictionary describing the attempt. Typical keys on success/normal completion:
+                                 - "attack": "bkz_reduction"
+                                 - "block_size": int, the block size actually used
+                                 - "shortest_norm": float, Euclidean norm of the found shortest vector
+                                 - "expected_error_norm": float, estimated ||e|| for the LBLO instance
+                                 - "trivial_vector": bool, true when the shortest vector is a trivial lattice unit (e.g., from I_n block)
+                                 - "time_seconds": float, elapsed time for the reduction
+                                 - "success": bool, whether a useful short vector for recovering s was found (typically False)
+                                 - "note": str, short human-readable explanation of the outcome
+                         
+                             If fpylll is unavailable or the instance is skipped, the dictionary contains:
+                                 - "attack": "bkz_reduction"
+                                 - "success": False
+                                 - "note": explanation (e.g., "fpylll not available" or "Instance too large for BKZ demo ...")
+                         
+                             On internal errors the dictionary contains:
+                                 - "attack": "bkz_reduction"
+                                 - "success": False
+                                 - "error": str, exception message
+                                 - "traceback": str, full traceback
+                                 - "note": short error summary
+                         """
     if not FPYLLL_AVAILABLE:
         return {
             "attack": "bkz_reduction",
@@ -567,12 +699,26 @@ def attack_bkz_reduction(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
 def attack_q2_structure(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
                         mu_true: np.ndarray) -> dict:
     """
-    Exploit the q/2 structure of the offset.
-    
-    Since offset is exactly q/2, check if this creates exploitable structure:
-    - b mod 2: does this leak information?
-    - b in [0, q/2) vs [q/2, q): does this correlate with mu?
-    """
+                        Analyze whether the q/2 offset in the LBLO construction leaks information about the binary offset vector.
+                        
+                        This function measures two observable effects: correlation between whether each b entry lies in the upper half [q/2, q) and the true mu bit, and a parity relation involving b mod 2 and (A @ s_true) mod 2 when q/2 is odd. It reports the empirical correlation, whether q/2 is odd, and the fraction of mu bits that would be recoverable if the secret s were known.
+                        
+                        Parameters:
+                            A (np.ndarray): Public m×n matrix of the LBLO instance.
+                            b (np.ndarray): Public length-m vector of LBLO outputs.
+                            s_true (np.ndarray): Ground-truth secret vector (used only to evaluate parity-based leakage).
+                            mu_true (np.ndarray): Ground-truth binary offset vector.
+                        
+                        Returns:
+                            dict: Analysis results with keys:
+                                - "attack": identifier string "q2_structure".
+                                - "q_half": integer q/2 used in the instance.
+                                - "q_half_is_odd": `True` if q/2 is odd.
+                                - "upper_lower_correlation": Pearson correlation between (b in upper half) and mu (float).
+                                - "mu_recovery_if_s_known": fraction of mu bits that would be recovered by the parity rule if s were known (float).
+                                - "success": always `False` (no full recovery performed here).
+                                - "note": brief explanation of the limitation (parity attack requires knowing s).
+                        """
     m, n = A.shape
     q_half = Q // 2
     
@@ -608,7 +754,23 @@ def attack_q2_structure(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
     }
 
 def run_all_attacks(n: int = 16, m: int = 64, seed: bytes = b"test_seed_12345"):
-    """Run all attacks and report results."""
+    """
+    Orchestrates generation of an LBLO instance, runs the full suite of attack simulations, and returns collected results.
+    
+    Generates an LBLO instance (A, b, s, mu) using the provided seed and then sequentially executes the implemented attack analyses:
+    partial brute-force, statistical distinguishing, lattice-embedding analysis, modular linear-algebra checks, subset guessing,
+    hybrid lattice guesses, meet-in-the-middle analysis, BKZ lattice reduction (when available), and q/2-structure analysis.
+    Progress and brief summaries for each attack are printed to stdout.
+    
+    Parameters:
+        n (int): Dimension of the secret vector s.
+        m (int): Number of samples / rows in A and entries in b.
+        seed (bytes): Seed bytes used to derive the secret and to initialize instance generation.
+    
+    Returns:
+        results (list): A list of dictionaries, one per attack, each containing standardized fields such as
+        'success' (bool), an attack-specific set of metrics, and a human-readable 'note' describing observed behavior.
+    """
     print(f"\n{'='*60}")
     print(f"LBLO Attack Simulation: n={n}, m={m}, q={Q}")
     print(f"{'='*60}\n")
@@ -750,7 +912,18 @@ def run_scaled_analysis():
     print(f"  Subset-sum density: 2^{-(m-n)} = 2^{-(m-n)}")
 
 def run_intensive_attacks(n: int = 16, m: int = 64, seed: bytes = b"intensive_test"):
-    """Run more compute-intensive attacks."""
+    """
+    Execute an intensive suite of LBLO attacks on a freshly generated instance and collect per-attack results.
+    
+    Runs a sequence of compute-heavy analyses including progressive BKZ reductions (when FPYLLL is available), an exhaustive hybrid (full mu search) for small n, and a deep correlation/bias analysis; each attack's outcome and diagnostics are recorded in a result entry. The function generates a new LBLO instance internally using the provided seed.
+    
+    Returns:
+        results (list): A list of dictionaries, each describing a single attack run. Common keys include:
+            - "attack" (str): short identifier of the attack
+            - "success" (bool): whether the attack is considered successful
+            - "note" (str): human-readable summary or diagnostic
+            - additional attack-specific metrics (e.g., "time_seconds", "attempts", "shortest_norm", "avg_bucket_bias")
+    """
     print(f"\n{'='*60}")
     print(f"INTENSIVE ATTACK SUITE: n={n}, m={m}")
     print(f"{'='*60}\n")
