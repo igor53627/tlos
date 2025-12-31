@@ -22,8 +22,8 @@ forge test
 source ~/.zsh_secrets
 forge script scripts/BenchmarkTLOS.s.sol --rpc-url "$TENDERLY_RPC" --broadcast --unlocked -vvv
 
-# Build papers
-cd paper && pdflatex tlos.tex && pdflatex tlos-paper.tex
+# Build papers (quick - run twice for refs)
+cd paper && pdflatex tlos.tex && pdflatex tlos.tex && pdflatex tlos-paper.tex && pdflatex tlos-paper.tex
 ```
 
 ## Repository Structure

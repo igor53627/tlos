@@ -934,10 +934,11 @@ This is a \emph{mix-and-match attack}: using inconsistent intermediate values to
 
 \subsection{Wire Binding Construction}
 
-The wire binding layer uses a full-rank linear map over $\mathbb{Z}_q$: $H(x) = Ax \mod q$ where $A \in \mathbb{Z}_q^{64 \times 64}$ is derived from the circuit seed and batch index. Each 128-gate batch updates the accumulator:
+The wire binding layer uses a full-rank linear map over $\mathbb{Z}_q$: $H_k(x) = A_k x \mod q$ where $A_k \in \mathbb{Z}_q^{64 \times 64}$ is derived from the circuit seed and batch index $k$. Each 128-gate batch updates the accumulator:
 \[
-\mathsf{acc}_{k+1} = H(\mathsf{acc}_k \oplus \mathsf{wires}, \mathsf{batchEnd}_k)
+\mathsf{acc}_{k+1} = H_k(\mathsf{acc}_k + \mathsf{wires}_k \mod q)
 \]
+where $\mathsf{wires}_k$ is the packed wire state after batch $k$, and addition is component-wise over $\mathbb{Z}_q^{64}$.
 
 \textbf{Why 64$\times$64?} A full-rank matrix has trivial kernel (only zero vector), so $H$ is a bijection: each accumulator value has a unique preimage. Smaller matrices have large nullspaces where many wire states collide.
 

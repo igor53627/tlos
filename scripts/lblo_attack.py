@@ -78,11 +78,11 @@ def attack_brute_force_partial(A: np.ndarray, b: np.ndarray, num_guesses: int = 
         mu_guess = np.random.randint(0, 2, size=min(n+10, m))
         
         # Adjust b by guessed offsets
-        b_adjusted = np.mod(b[:len(mu_guess)] - mu_guess * (Q // 2), Q)
+        _b_adjusted = np.mod(b[:len(mu_guess)] - mu_guess * (Q // 2), Q)
         
         # Try to solve A[:len(mu_guess)] * s = b_adjusted
         # This is overdetermined if len(mu_guess) > n
-        A_sub = A[:len(mu_guess)]
+        _A_sub = A[:len(mu_guess)]
         
         # Check rank - if full rank, unique solution exists
         # But we can't verify correctness without knowing true s
@@ -97,7 +97,7 @@ def attack_brute_force_partial(A: np.ndarray, b: np.ndarray, num_guesses: int = 
         "note": f"Would need 2^{m} guesses for full brute force"
     }
 
-def attack_statistical_distinguishing(A: np.ndarray, b: np.ndarray, s_true: np.ndarray) -> dict:
+def attack_statistical_distinguishing(A: np.ndarray, b: np.ndarray, _s_true: np.ndarray) -> dict:
     """
     Test if b values leak information about mu through statistical analysis.
     
@@ -105,7 +105,7 @@ def attack_statistical_distinguishing(A: np.ndarray, b: np.ndarray, s_true: np.n
     the distribution but doesn't change its uniformity. Thus b values
     don't reveal which samples have mu=0 vs mu=1.
     """
-    m, n = A.shape
+    m, _n = A.shape
     q_half = Q // 2
     
     # Compute b mod (q/2)
@@ -135,7 +135,7 @@ def attack_statistical_distinguishing(A: np.ndarray, b: np.ndarray, s_true: np.n
         "note": "b distribution is uniform, no distinguishing advantage"
     }
 
-def attack_lattice_embedding_analysis(A: np.ndarray, b: np.ndarray, n: int, m: int) -> dict:
+def attack_lattice_embedding_analysis(_A: np.ndarray, _b: np.ndarray, n: int, m: int) -> dict:
     """
     Analyze why lattice embedding attacks fail.
     
@@ -266,7 +266,7 @@ def attack_linear_algebra_wrong_mu(A: np.ndarray, b: np.ndarray, s_true: np.ndar
         "note": "Without knowing mu, linear algebra fails"
     }
 
-def attack_subset_guess(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, mu_true: np.ndarray, 
+def attack_subset_guess(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, _mu_true: np.ndarray, 
                         guess_count: int = 10) -> dict:
     """
     Try guessing small subsets of mu and checking consistency.
@@ -321,7 +321,7 @@ def attack_subset_guess(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, mu_tru
 # =============================================================================
 
 def attack_hybrid_lattice(A: np.ndarray, b: np.ndarray, s_true: np.ndarray, 
-                          mu_true: np.ndarray, k_guess: int = 4) -> dict:
+                          _mu_true: np.ndarray, k_guess: int = 4) -> dict:
     """
     Hybrid attack: guess k bits of mu, then solve reduced problem.
     
@@ -394,8 +394,8 @@ def attack_hybrid_lattice(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
         "note": f"Need to guess n={n} mu bits; cost {full_cost}"
     }
 
-def attack_meet_in_middle(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
-                          mu_true: np.ndarray, half_bits: int = 8) -> dict:
+def attack_meet_in_middle(A: np.ndarray, _b: np.ndarray, _s_true: np.ndarray,
+                          _mu_true: np.ndarray, half_bits: int = 8) -> dict:
     """
     Meet-in-the-middle attack on mu.
     
@@ -418,7 +418,7 @@ def attack_meet_in_middle(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
     
     # Build lookup table for left half
     k_left = k // 2
-    k_right = k - k_left
+    _k_right = k - k_left
     
     # For each left-half mu guess, store (partial_b_adjusted, mu_left)
     # This doesn't directly give us s, so MITM is not applicable here
@@ -426,7 +426,7 @@ def attack_meet_in_middle(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
     # Instead, demonstrate that even small MITM doesn't help
     table_size = 2 ** k_left
     
-    elapsed = time.time() - start
+    _elapsed = time.time() - start
     
     return {
         "attack": "meet_in_middle",
@@ -436,8 +436,8 @@ def attack_meet_in_middle(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
         "note": f"MITM not directly applicable: s is shared across all equations. Would need 2^{n} memory to store all possible s values."
     }
 
-def attack_bkz_reduction(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
-                         mu_true: np.ndarray, block_size: int = 20) -> dict:
+def attack_bkz_reduction(A: np.ndarray, b: np.ndarray, _s_true: np.ndarray,
+                         _mu_true: np.ndarray, block_size: int = 20) -> dict:
     """
     Actual BKZ lattice reduction attack.
     
@@ -573,7 +573,7 @@ def attack_q2_structure(A: np.ndarray, b: np.ndarray, s_true: np.ndarray,
     - b mod 2: does this leak information?
     - b in [0, q/2) vs [q/2, q): does this correlate with mu?
     """
-    m, n = A.shape
+    _m, _n = A.shape
     q_half = Q // 2
     
     # Check if b being in upper/lower half correlates with mu
@@ -739,7 +739,7 @@ def run_scaled_analysis():
         print(f"  Brute-force cost: {brute_force_cost}")
     
     # Full TLOS params
-    print(f"\n--- TLOS Production: n=128, m=2560 ---")
+    print("\n--- TLOS Production: n=128, m=2560 ---")
     n, m = 128, 2560
     error_norm = np.sqrt(m / 2) * (Q // 2)
     gaussian_heuristic = np.sqrt(n) * (Q ** (n / (n + m)))
@@ -819,8 +819,9 @@ def run_intensive_attacks(n: int = 16, m: int = 64, seed: bytes = b"intensive_te
     # 3. Correlation analysis with more samples
     print("\n[*] Deep correlation analysis...")
     # Check various statistical properties
-    b_centered = b.astype(np.float64) - Q/2
-    A_flat = A.flatten().astype(np.float64)
+    # (b_centered and A_flat computed for potential future analysis)
+    _b_centered = b.astype(np.float64) - Q/2
+    _A_flat = A.flatten().astype(np.float64)
     
     # Mutual information estimate (simplified)
     # If b leaks info about mu, MI > 0
@@ -835,7 +836,7 @@ def run_intensive_attacks(n: int = 16, m: int = 64, seed: bytes = b"intensive_te
     
     # Check if mu distribution varies by bucket
     bucket_biases = []
-    for bucket, mus in mu_given_bucket.items():
+    for _bucket, mus in mu_given_bucket.items():
         if len(mus) > 1:
             bias = abs(np.mean(mus) - 0.5)
             bucket_biases.append(bias)

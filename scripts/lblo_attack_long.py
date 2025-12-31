@@ -94,7 +94,7 @@ def exhaustive_attack(n: int, m: int, seed: bytes, time_limit_sec: float = 3600)
     """
     log(f"Starting exhaustive attack: n={n}, m={m}, limit={time_limit_sec}s")
     
-    A, b, s, mu = generate_lblo_instance(n, m, seed)
+    A, b, s, _mu = generate_lblo_instance(n, m, seed)
     
     start = time.time()
     attempts = 0
@@ -229,7 +229,7 @@ def run_long_suite(max_hours: float = 4, n_max: int = 24):
         seed = f"stats_n{n}".encode()
         
         log(f"\nAnalyzing n={n}, m={m}")
-        A, b, s, mu = generate_lblo_instance(n, m, seed)
+        A, b, _s, mu = generate_lblo_instance(n, m, seed)
         
         # Statistical tests
         b_mean = np.mean(b)
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-max", type=int, default=24, help="Max n value to test")
     args = parser.parse_args()
     
-    log(f"Starting long-running attack suite")
+    log("Starting long-running attack suite")
     log(f"PID: {os.getpid()}")
     log(f"Args: hours={args.hours}, n_max={args.n_max}")
     
