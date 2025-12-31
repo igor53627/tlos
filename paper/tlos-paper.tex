@@ -47,9 +47,9 @@
 \maketitle
 
 \begin{abstract}
-We present \tlos{} (Topology-Lattice Obfuscation for Smart contracts), a practical circuit obfuscation framework for EVM that adds inter-gate wire consistency via a full-rank linear hash (inspired by~\cite{MDS25}). \tlos{} uses a three-layer security model: a topology layer that defeats structural and statistical attacks, a lattice layer using on-chain \lwe{} inner products that defeats semantic attacks, and a wire binding layer that binds wire values across gates to prevent mix-and-match attacks.
+We present \tlos{} (Topology-Lattice Obfuscation for Smart contracts), a practical circuit obfuscation framework for EVM that adds inter-gate wire consistency via a full-rank linear hash (inspired by~\cite{MDS25}). \tlos{} uses a three-layer security model: a topology layer that defeats structural and statistical attacks, a lattice layer using on-chain noiseless LWE-like (LBLO) inner products that defeats semantic attacks, and a wire binding layer that binds wire values across gates to prevent mix-and-match attacks.
 
-\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank $64{\times}64$ wire binding. Control functions are hidden via \lwe{} ciphertexts; wire binding ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ dimension and full-rank $64{\times}64$ wire binding. Control functions are hidden via LBLO ciphertexts (noiseless; security is heuristic, not based on standard LWE reductions); wire binding ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ Smart contracts on public blockchains are fully transparent: anyone can read the
   \item \textbf{Identity:} ENS recovery codes, one-time delegation codes, multi-code access control
 \end{itemize}
 
-The core problem: EVM has no memory-hard KDF (Argon2/scrypt) as a precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess, making low-entropy secrets (human phrases, small ranges) trivially crackable offline. \tlos{} transforms each guess into expensive LWE computation (${\sim}100$ms/guess), a $10^8\times$ slowdown that makes dictionary attacks economically prohibitive.
+The core problem: EVM has no memory-hard KDF (Argon2/scrypt) as a precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess, making low-entropy secrets (human phrases, small ranges) trivially crackable offline. \tlos{} transforms each guess into an expensive LBLO-style (noiseless LWE-like) inner-product computation (${\sim}100$ms/guess), a $10^8\times$ slowdown that makes dictionary attacks economically prohibitive.
 
 Traditional circuit obfuscation aims for \emph{permanent} security: given the obfuscated circuit $\obf(C)$, no efficient adversary can ever extract useful information beyond input-output behavior. The best theoretical constructions achieve indistinguishability obfuscation (iO) from LWE~\cite{JLS21,GP21,CLW25}, but with overhead exceeding $10^6\times$; far too expensive for on-chain deployment.
 
@@ -80,7 +80,7 @@ We take a practical approach: \emph{resist known attack classes} through three c
 \begin{enumerate}
   \item \textbf{Layer 1 (Topology):} Structural mixing defeats structural and statistical attacks through wire selection patterns (non-pow2 distances, uniform wire usage, irregular layers). \emph{Security: heuristic, empirically validated.}
   
-  \item \textbf{Layer 2 (\lwe{}):} On-chain inner product computation defeats semantic attacks (RainbowTable). Control functions hidden via \lwe{} ciphertexts. \emph{Security: computational, based on \lwe{} hardness (see Table~\ref{tab:lwe-security} for actual estimates).}
+  \item \textbf{Layer 2 (LBLO):} On-chain inner product computation defeats semantic attacks (RainbowTable). Control functions hidden via noiseless LWE-like ciphertexts. \emph{Security: heuristic ${\sim}2^{98}$ PQ cost for known attacks on our LBLO construction; not standard LWE (see \S\ref{sec:lblo}).}
   
   \item \textbf{Layer 3 (Wire Binding):} Full-rank linear hash binds wire values across gate evaluations, preventing mix-and-match attacks (see \S\ref{sec:wire-binding}). \emph{Security: algebraic binding via bijective map over $\mathbb{Z}_q^{64}$ (not cryptographic hiding).}
 \end{enumerate}
@@ -101,11 +101,11 @@ The RainbowTable attack is \emph{semantic}: it matches circuit behavior (truth t
 
 Topology-only defenses cannot block this attack because any structural transformation preserves the semantic behavior of reversible circuits.
 
-\textbf{The \lwe{} layer defeats step 2 via wrong-key garbage.} Control functions are hidden via \lwe{} ciphertexts where the encryption key $s_{\mathsf{enc}} = H(\mathsf{secret})$ is derived from the \emph{correct} secret. An attacker with full bytecode can simulate circuit evaluation on any candidate input $x'$, but:
+\textbf{The LBLO layer defeats step 2 via wrong-key garbage.} Control functions are hidden via LBLO ciphertexts (noiseless LWE-like; see Definition~\ref{def:lblo}) where the encryption key $s_{\mathsf{enc}} = H(\mathsf{secret})$ is derived from the \emph{correct} secret. An attacker with full bytecode can simulate circuit evaluation on any candidate input $x'$, but:
 \begin{itemize}
   \item The derived evaluation key $s(x') = H(x')$ will be \emph{wrong} for $x' \neq \mathsf{secret}$
   \item Evaluating with the wrong key produces random/incorrect control function bits (garbage)
-  \item Recovering the correct CFs without knowing the secret requires solving \lwe{}
+  \item Recovering the correct CFs without knowing the secret appears to require solving the LBLO problem; this is heuristic and not based on a standard LWE reduction
 \end{itemize}
 
 \textbf{Important:} Attackers \emph{can} simulate the circuit offline; this is not a ``restricted oracle'' in the sense of blocking evaluation. The defense is that wrong-key evaluation yields \emph{meaningless} subcircuit semantics. The on-chain contract reinforces this by exposing only a 1-bit oracle (true/false), limiting information leakage per query.
@@ -113,15 +113,15 @@ Topology-only defenses cannot block this attack because any structural transform
 \subsection{Contributions}
 
 \begin{enumerate}
-  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain \lwe{} inner products, and a full-rank wire binding layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ binding matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 9/9 resistance in our attack evaluation matrix.
+  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain LBLO (noiseless LWE-like) inner products, and a full-rank wire binding layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ binding matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 9/9 resistance in our attack evaluation matrix.
   
   \item \textbf{Structural Mixing:} Wire selection algorithm defeating structural and statistical attacks through non-pow2 distances, uniform wire usage, and irregular layers. Security is heuristic and empirically validated.
   
   \item \textbf{Wrong-Key Garbage Property:} Attackers can simulate evaluation offline with any candidate input, but wrong keys yield garbage control function bits. The on-chain 1-bit oracle limits information leakage per query.
   
-  \item \textbf{On-Chain \lwe{}:} Control functions hidden via \lwe{} ciphertexts with full inner product computation on-chain. No hints or shortcuts; true \lwe{} hardness.
+  \item \textbf{On-Chain LBLO (LWE-like):} Control functions hidden via noiseless LWE-like ciphertexts (LBLO; see Definition~\ref{def:lblo}) with full inner product computation on-chain. No hints or shortcuts; recovering control-function bits without the secret appears to require solving LBLO.
   
-  \item \textbf{Post-Quantum Resistance:} \lwe{}-based security with no cryptographic assumptions in the topology layer. See Table~\ref{tab:lwe-security} for security estimates by dimension.
+  \item \textbf{Post-Quantum Resistance (Conjectured):} Security of control-function hiding relies on the conjectured hardness of LBLO. Our ${\sim}2^{98}$ PQ estimate is based on heuristic modeling with the LWE estimator (see Table~\ref{tab:lwe-security}), not on standard LWE reductions.
   
   \item \textbf{Attack Evaluation:} Empirical validation against 14 attack implementations across 6 categories.
 \end{enumerate}
@@ -130,10 +130,10 @@ Topology-only defenses cannot block this attack because any structural transform
 
 \textbf{What \tlos{} provides:}
 \begin{itemize}
-  \item Computational security based on \lwe{} hardness (see Table~\ref{tab:lwe-security} for estimates: ${\sim}203$-bit classical for $n{=}128$ with uniform secrets) plus empirical heuristics (topology layer)
+  \item Computational security based on \emph{conjectured} hardness of our noiseless LBLO construction (modeled heuristically via the LWE estimator; see Table~\ref{tab:lwe-security} for rough complexity estimates) plus empirical heuristics (topology layer)
   \item Attack resistance (9/9 in our evaluation matrix; not a universal security claim)
   \item Practical gas costs (${\sim}8.5$M for $n{=}128$, 28\% of block limit)
-  \item Post-quantum resistance (relative to \lwe{} parameters)
+  \item Conjectured post-quantum resistance (to the extent that LBLO resists quantum attacks at our parameter sizes; no worst-case lattice reduction is known for LBLO)
   \item Public evaluation: no secret keys required to evaluate the circuit on-chain
   \item Wrong-key garbage property: attackers can simulate offline but wrong keys yield garbage outputs
 \end{itemize}
@@ -146,7 +146,7 @@ Topology-only defenses cannot block this attack because any structural transform
   \item Universal security against all possible attacks; we resist our 9-class taxonomy only
   \item Forward secrecy for long-lived secrets (expired secrets may be analyzed retroactively)
   \item Protection against protocol logic bugs, economic/incentive attacks, or EVM-level side channels
-  \item Security after \lwe{} compromise: if an adversary recovers all control function bits (e.g., by solving the underlying \lwe{} instances), the circuit becomes a fully specified reversible circuit that can be inverted gate-by-gate in linear time. The topology layer offers no post-compromise security; it only increases the cost of \emph{pre-compromise} structural and statistical attacks
+  \item Security after LBLO compromise: if an adversary recovers all control function bits (e.g., by breaking the underlying LBLO instances), the circuit becomes a fully specified reversible circuit that can be inverted gate-by-gate in linear time. The topology layer offers no post-compromise security; it only increases the cost of \emph{pre-compromise} structural and statistical attacks
 \end{itemize}
 
 \subsection{Related Work}
@@ -175,7 +175,7 @@ Topology-only defenses cannot block this attack because any structural transform
   \item \textbf{Gas cost is acceptable:} At 0.03 gwei, 8.5M gas $\approx$ \$0.80, negligible for most applications
 \end{itemize}
 
-Under these constraints, \tlos{} provides the \emph{only} practical mechanism to make low-entropy secret verification expensive on EVM. No memory-hard KDF (Argon2, scrypt, bcrypt) exists as an EVM precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess; \tlos{} requires ${\sim}100$ms/guess, a $10^8\times$ slowdown.
+Under these constraints, \tlos{} provides a practical mechanism to make low-entropy secret verification expensive on EVM. No memory-hard KDF (Argon2, scrypt, bcrypt) exists as an EVM precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess; \tlos{} requires ${\sim}100$ms/guess, a $10^8\times$ slowdown.
 
 \subsection{Practical Use Cases}
 
@@ -229,7 +229,7 @@ Under these constraints, \tlos{} provides the \emph{only} practical mechanism to
   \item \textbf{When alternatives exist:} If zk-SNARKs, private L2s, or off-chain KDFs are available and acceptable, they may be simpler.
 \end{itemize}
 
-For long-lived secrets, an adversary can analyze the circuit for arbitrarily long time. While \lwe{} provides computational security (${\sim}2^{98}$ PQ), we do not claim this is sufficient for secrets requiring decades of protection.
+For long-lived secrets, an adversary can analyze the circuit for arbitrarily long time. While our LBLO construction provides estimated computational security (${\sim}2^{98}$ PQ, heuristic), we do not claim this is sufficient for secrets requiring decades of protection.
 
 %------------------------------------------------------------------------------
 \section{Preliminaries}
@@ -304,7 +304,7 @@ The self-inverse property enables commit-reveal protocols where the solver demon
 \begin{enumerate}
   \item \textbf{Topology Layer:} Structural mixing that defeats structural and statistical attacks through wire selection patterns. No cryptographic primitives; purely structural.
   
-  \item \textbf{\lwe{} Layer:} On-chain inner product computation hides control functions, defeating semantic attacks by preventing subcircuit evaluation.
+  \item \textbf{LBLO Layer (LWE-like):} On-chain LBLO inner-product computation hides control functions, defeating semantic attacks by preventing subcircuit evaluation (see Definition~\ref{def:lblo}).
   
   \item \textbf{Wire Binding Layer:} Full-rank $64{\times}64$ linear hash binds wire values across gates, preventing mix-and-match attacks. Updated every 128 gates for gas efficiency.
 \end{enumerate}
@@ -347,7 +347,7 @@ We describe the protocol through three actors:
 \begin{itemize}
   \item \textbf{On-chain oracle interface:} Each on-chain query returns only 1 bit (true/false), limiting information leakage per query. The attacker cannot query intermediate wire states via the contract.
   \item \textbf{Wrong-key garbage:} Attackers \emph{can} simulate evaluation offline with any candidate input $x'$. However, wrong keys yield garbage control function bits. The ciphertexts are encrypted under $s_{\mathsf{enc}} = H(\mathsf{secret})$; decrypting with $s(x') = H(x')$ for $x' \neq \mathsf{secret}$ produces random bits.
-  \item \textbf{\lwe{} hardness:} Recovering correct CF bits without knowing the secret requires solving \lwe{} (see Table~\ref{tab:lwe-security} for security estimates).
+  \item \textbf{LBLO hardness (noiseless, LWE-like):} Recovering correct CF bits without knowing the secret requires solving the LBLO problem (Definition~\ref{def:lblo}). We estimate its cost heuristically using the LWE estimator (Table~\ref{tab:lwe-security}); standard LWE reductions do not apply because there is no noise.
   \item \textbf{Expiry:} After the timestamp, the secret may no longer be valuable (application-specific).
 \end{itemize}
 
@@ -365,7 +365,7 @@ We describe the protocol through three actors:
 \begin{enumerate}
   \item Generate circuit $C$ that computes $C(x) = 1$ iff $x = \mathit{secret}$
   \item Apply topology layer: wire selection with non-pow2 distances, uniform usage
-  \item Apply \lwe{} layer: encode control functions as \lwe{} ciphertexts
+  \item Apply LBLO layer: encode control functions as LBLO (noiseless LWE-like) ciphertexts
   \item Deploy contract with circuit data (SSTORE2), expected output hash, and expiry timestamp
 \end{enumerate}
 
@@ -381,7 +381,7 @@ We describe the protocol through three actors:
 \textbf{Attack (Charlie):}
 \begin{enumerate}
   \item Analyze circuit structure (topology layer blocks structural attacks)
-  \item Attempt subcircuit evaluation (\lwe{} layer blocks; CFs hidden by \lwe{})
+  \item Attempt subcircuit evaluation (LBLO layer blocks; CFs hidden by LBLO ciphertexts)
   \item Resort to brute force ($2^{256}$ for 256-bit secrets; infeasible)
 \end{enumerate}
 
@@ -453,7 +453,7 @@ DiagonalCorrelation & Statistical & Topology & 64+ wires, irregular layers \\
 \textbf{Key insight:} Unlike butterfly or derangement topologies that only rearrange gates, the topology layer has anti-attack properties \emph{built into wire selection}. The wire selection algorithm is designed specifically to defeat known attack heuristics.
 
 %------------------------------------------------------------------------------
-\section{The \lwe{} Layer}
+\section{The LBLO (LWE-Like) Layer}
 %------------------------------------------------------------------------------
 
 \subsection{The RainbowTable Problem}
@@ -469,13 +469,13 @@ The RainbowTable attack is \emph{semantic}: it matches circuit behavior (truth t
 
 If a match is found, the attacker learns the semantic function computed by that subcircuit, potentially revealing the embedded secret or simplifying further analysis.
 
-\subsection{How On-Chain \lwe{} Blocks RainbowTable}
+\subsection{How On-Chain LBLO Blocks RainbowTable}
 
-The wrong-key-gives-garbage property is the primary defense: attackers can simulate offline with any input, but wrong keys yield meaningless control function bits. The on-chain interface provides only a 1-bit full-circuit oracle. \lwe{} cryptography provides computational hardness.
+The wrong-key-gives-garbage property is the primary defense: attackers can simulate offline with any input, but wrong keys yield meaningless control function bits. The on-chain interface provides only a 1-bit full-circuit oracle. LBLO (noiseless LWE-like) cryptography provides conjectured computational hardness.
 
 \begin{center}
 \fbox{\parbox{0.9\textwidth}{
-\textbf{On-Chain Inner Product:} Each gate's control function is encoded as an \lwe{} ciphertext $(a, b)$ where $b = \langle a, s \rangle + e + \mathsf{bit} \cdot q/2$. The secret $s = H(\mathsf{input})$ is derived from the circuit input at evaluation time. The contract computes the inner product on-chain:
+\textbf{On-Chain Inner Product:} Each gate's control function is encoded as an LBLO ciphertext $(a, b)$ where $b = \langle a, s \rangle + \mathsf{bit} \cdot q/2 \pmod q$ (no independent error term; see Definition~\ref{def:lblo} and \S\ref{sec:lblo}). The secret $s = H(\mathsf{input})$ is derived from the circuit input at evaluation time. The contract computes the inner product on-chain:
 
 \smallskip
 \texttt{s = keccak256(input) expanded to n u16 elements mod q}\\
@@ -484,29 +484,33 @@ The wrong-key-gives-garbage property is the primary defense: attackers can simul
 \texttt{cfBit = (diff > q/4) \&\& (diff < 3*q/4)}
 \smallskip
 
-\textbf{No hints stored:} Unlike compact formats that store $(b, \mathsf{hint})$ pairs (which allow offline CF recovery), \tlos{} stores full $(a, b)$ ciphertexts. Recovering CFs requires solving \lwe{}.
+\textbf{No hints stored:} Unlike compact formats that store $(b, \mathsf{hint})$ pairs (which allow offline CF recovery), \tlos{} stores full $(a, b)$ ciphertexts. Recovering CFs without the secret appears to require solving the LBLO problem (heuristically modeled via LWE estimators), not standard LWE.
 }}
 \end{center}
 
-\begin{proposition}[\lwe{} Hides Subcircuit Semantics]
-Under \lwe{} hardness, no \ppt{} adversary can recover the \emph{true semantic behavior} (correct control function bits or truth tables) of a proper subcircuit without knowing the secret.
+\begin{proposition}[LBLO Hides Subcircuit Semantics]
+Assuming hardness of the LBLO problem (Definition~\ref{def:lblo}), no \ppt{} adversary can recover the \emph{true semantic behavior} (correct control function bits or truth tables) of a proper subcircuit without knowing the secret.
 \end{proposition}
 
 \begin{proof}[Proof sketch]
-Let $C = (g_1, \ldots, g_m)$ be the circuit with control functions encoded as \lwe{} ciphertexts under key $s_{\mathsf{enc}} = H(\mathsf{secret})$. For any proper subsequence $S = (g_i, \ldots, g_j)$:
+Let $C = (g_1, \ldots, g_m)$ be the circuit with control functions encoded as LBLO ciphertexts under key $s_{\mathsf{enc}} = H(\mathsf{secret})$. For any proper subsequence $S = (g_i, \ldots, g_j)$:
 
 An attacker \emph{can} run $S$ with any guessed input $x'$, deriving $s(x') = H(x')$. However, for $x' \neq \mathsf{secret}$, decrypting the control function ciphertexts with the wrong key $s(x')$ yields random bits, not the true control function values.
 
-Under \lwe{} hardness, recovering the correct CF bits from $(a, b)$ without knowing $s_{\mathsf{enc}}$ is computationally infeasible.
+Recovering the correct CF bits from $(a, b)$ without knowing $s_{\mathsf{enc}}$ requires solving the LBLO problem, which we conjecture is hard based on empirical evidence (\S\ref{sec:lblo}).
 
-Therefore, while adversaries can \emph{execute} subcircuits, they cannot recover meaningful semantics without the secret (or solving \lwe{}).
+Therefore, while adversaries can \emph{execute} subcircuits, they cannot recover meaningful semantics without the secret (or solving LBLO).
 \end{proof}
+
+\begin{remark}
+If our construction used standard noisy LWE instead of LBLO, this proposition would follow from~\cite{WZ17} under the LWE assumption. For our noiseless LBLO variant, security is \emph{conjectured} based on the attack analysis in \S\ref{sec:lblo}, not proven via reduction.
+\end{remark}
 
 \subsection{Control Function Encoding}
 
-Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) is represented as 4 \lwe{} ciphertexts, one for each truth table entry: $c_f \mapsto (\mathsf{ct}_{00}, \mathsf{ct}_{01}, \mathsf{ct}_{10}, \mathsf{ct}_{11})$.
+Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) is represented as 4 LBLO ciphertexts (noiseless LWE-like), one for each truth table entry: $c_f \mapsto (\mathsf{ct}_{00}, \mathsf{ct}_{01}, \mathsf{ct}_{10}, \mathsf{ct}_{11})$.
 
-\textbf{\lwe{} Parameters:}
+\textbf{LBLO / LWE-Like Parameters:}
 \begin{itemize}
   \item Modulus: $q = 65521$ (largest 16-bit prime)
   \item Dimension: $n = 128$ (deployed); $n \in \{16, 32\}$ for security estimates
@@ -542,18 +546,18 @@ Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) i
 \begin{enumerate}
   \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns that break attack heuristics. Security is \emph{empirical}, validated against our attack suite but not formally proven.
   
-  \item \textbf{\lwe{} layer (computational):} Defeats semantic attacks by hiding control functions via \lwe{} ciphertexts with on-chain inner products. Security is \emph{computational}, based on \lwe{} hardness (see Table~\ref{tab:lwe-security}).
+  \item \textbf{LBLO layer (heuristic):} Defeats semantic attacks by hiding control functions via LBLO ciphertexts with on-chain inner products. Security is \emph{conjectured}, based on LBLO hardness (see Table~\ref{tab:lwe-security} and \S\ref{sec:lblo}).
   
   \item \textbf{Wire binding layer (algebraic):} Binds wire values across gates via full-rank linear hash, preventing mix-and-match attacks. Security is \emph{algebraic binding}, not cryptographic hiding.
 \end{enumerate}
 
 \textbf{Wrong-key garbage property:} Attackers can simulate offline but wrong keys yield garbage. The on-chain contract exposes only 1-bit output, limiting information per query.
 
-\subsection{\lwe{} Security Estimates}
+\subsection{LBLO Security Estimates}
 
-\textbf{Uniform-Secret \lwe{}.} A key property of \tlos{} is that the \lwe{} secret $s_{\mathsf{enc}} = H(\mathsf{secret})$ is \emph{uniform} over $\mathbb{Z}_q^n$, not a small-coefficient secret as in standard \lwe{} assumptions. This arises naturally from expanding a cryptographic hash output to $n$ elements modulo $q$. The uniform-secret variant is \emph{harder} to attack than small-secret \lwe{}: primal (uSVP) attacks rely on finding short vectors $(s, e)$ in a lattice, but when $s$ has norm ${\sim}\sqrt{n} \cdot q/2$ rather than ${\sim}\sqrt{n}$, the attack fails. We validated this empirically: BKZ-50 reduction on $n{=}16$ instances failed to recover the secret after 200+ basis updates.
+\textbf{Uniform-Secret LBLO.} A key property of \tlos{} is that the LBLO secret $s_{\mathsf{enc}} = H(\mathsf{secret})$ is \emph{uniform} over $\mathbb{Z}_q^n$, not a small-coefficient secret as in standard LWE assumptions. This arises naturally from expanding a cryptographic hash output to $n$ elements modulo $q$. The uniform-secret variant is \emph{harder} to attack than small-secret LWE: primal (uSVP) attacks rely on finding short vectors $(s, e)$ in a lattice, but when $s$ has norm ${\sim}\sqrt{n} \cdot q/2$ rather than ${\sim}\sqrt{n}$, the attack fails. We validated this empirically: BKZ-50 reduction on $n{=}16$ instances failed to recover the secret after 200+ basis updates.
 
-Table~\ref{tab:lwe-security} presents security estimates for uniform-secret \lwe{} based on dual-attack analysis (which remains effective regardless of secret distribution). These estimates use BKZ lattice reduction with the ``Core-SVP'' cost model.
+Table~\ref{tab:lwe-security} presents heuristic security estimates for our LBLO construction, modeled as uniform-secret LWE for the purpose of applying the LWE Estimator. These estimates use BKZ lattice reduction with the ``Core-SVP'' cost model. \textbf{Note:} Standard LWE reductions do not apply to LBLO; these numbers are rough complexity yardsticks.
 
 \begin{table}[h]
 \centering
@@ -567,20 +571,26 @@ $n{=}32$ & ${\sim}51$-bit & ${\sim}46$-bit & 1.27M & Low security (experiments o
 $n{=}128$ & ${\sim}203$-bit & ${\sim}98$-bit & 8.5M & Deployed parameter (production use) \\
 \bottomrule
 \end{tabular}
-\caption{\lwe{} security estimates for uniform-secret variant ($q{=}65521$, $m{=}2560$, no error term). Estimates based on dual attacks in the LWE Estimator~\cite{APS15}; heuristic since our construction lacks noise. Gas costs are for 64-wire/640-gate circuits; only $n{=}128$ is used on-chain in \tlos{}.}
+\caption{LBLO security estimates (modeled as uniform-secret LWE; $q{=}65521$, $m{=}2560$, no error term). Estimates based on dual attacks in the LWE Estimator~\cite{APS15}; \textbf{heuristic} since our construction lacks noise and standard LWE reductions do not apply. Gas costs are for 64-wire/640-gate circuits; only $n{=}128$ is used on-chain in \tlos{}.}
 \end{table}
 
-\textbf{Important:} Our default parameters ($n{=}128$) provide ${\sim}203$-bit classical/${\sim}98$-bit post-quantum security. This is suitable for production applications. We validated these estimates via direct lattice attacks using fpylll/BKZ; see \S\ref{sec:attack-validation}.
+\textbf{Important caveat:} The estimates in Table~\ref{tab:lwe-security} are \emph{heuristic} because our construction lacks a Gaussian error term. Standard LWE security reductions do not apply directly. The quoted ``bit-security'' numbers should be interpreted as rough complexity yardsticks based on the best known attacks, not as formal security guarantees. We validated these estimates via direct lattice attacks using fpylll/BKZ; see \S\ref{sec:attack-validation}.
 
 \subsection{Binary-Offset Hardness Analysis}
 \label{sec:lblo}
 
 Our construction is \emph{not} standard LWE. We call it ``Learning with Binary Large Offset'' (LBLO):
+
+\begin{definition}[LBLO Problem]
+\label{def:lblo}
+The \emph{Learning with Binary Large Offset} problem LBLO$(n, q, m)$ is: given $m$ samples $(a_i, b_i)$ where $a_i \leftarrow \mathbb{Z}_q^n$ is uniform, $s \leftarrow \mathbb{Z}_q^n$ is a uniform secret, and
 \[
 b_i = \langle a_i, s \rangle + \mu_i \cdot (q/2) \mod q \quad \text{where } \mu_i \in \{0,1\}
 \]
+recover $s$ or any $\mu_i$ with non-negligible probability. The $\mu_i$ values are the hidden payload (control function bits in our application).
+\end{definition}
 
-This differs from standard LWE in two critical ways: (1) the ``error'' term is exactly $0$ or $q/2$, not sampled from a small Gaussian; (2) the $\mu_i$ values (control function bits) are the hidden payload, not independent noise. We analyzed potential attack classes:
+\noindent LBLO differs from standard LWE in two critical ways: (1) the ``error'' term is exactly $0$ or $q/2$, not sampled from a small Gaussian; (2) the $\mu_i$ values (control function bits) are the hidden payload, not independent noise. We analyzed potential attack classes:
 
 \textbf{Attack 1: Naive brute-force on all $\mu$.} An attacker could try all $2^m$ combinations of $\mu$ bits, checking consistency for each. For $m = 2560$ ciphertexts, this costs $2^{2560}$, completely infeasible. However, smarter attacks (Attack 5) reduce this to $2^n$.
 
@@ -641,9 +651,51 @@ $n$ & Rate (ops/s) & Full $2^n$ time & Extrapolated $n{=}128$ \\
 
 \begin{center}
 \framebox{\parbox{0.9\textwidth}{
-\textbf{Security Summary:} We tested 9 attack classes; all fail. Exhaustive search scales as $2^n$ with no shortcuts. Parallelization helps linearly but cannot overcome the exponential barrier. The ${\sim}2^{98}$ PQ / ${\sim}2^{203}$ classical estimates are empirically validated as conservative lower bounds.
+\textbf{Security Summary:} We tested 9 attack classes; all fail. Exhaustive search scales as $2^n$ with no shortcuts. Parallelization helps linearly but cannot overcome the exponential barrier. The ${\sim}2^{98}$ PQ / ${\sim}2^{203}$ classical estimates are empirically validated as conservative lower bounds. \emph{These are heuristic estimates, not formal security guarantees.}
 }}
 \end{center}
+
+\subsection{Noiseless Variant: Attack Surface Analysis}
+\label{sec:noiseless-attacks}
+
+Our construction departs from standard LWE by omitting the Gaussian error term. This subsection explicitly analyzes the attack surface created by this design choice.
+
+\textbf{What we lose without noise:}
+\begin{enumerate}
+  \item \textbf{Semantic security:} Standard LWE provides indistinguishability from uniform; our construction does not. Given $(a, b)$, an adversary can compute $b - \langle a, s \rangle \mod q$ for a \emph{known} $s$ and immediately recover $\mu$.
+  
+  \item \textbf{Reduction to lattice problems:} Standard LWE security reductions (to GapSVP, SIVP) rely on the error distribution. Our construction has no such reduction.
+  
+  \item \textbf{Sample amplification attacks:} Without noise, each sample provides a \emph{perfect} linear constraint on $(s, \mu)$. An adversary with unbounded samples could potentially exploit this structure.
+\end{enumerate}
+
+\textbf{Why security still holds (conditionally):}
+\begin{enumerate}
+  \item \textbf{Secret is unknown:} The adversary does \emph{not} know $s = H(\mathsf{secret})$. Recovering $\mu_i$ requires either knowing $s$ or solving a system with $2^m$ unknowns (the $\mu$ bits) and $n$-dimensional secret.
+  
+  \item \textbf{Large binary offset:} The ``error'' $\mu \cdot (q/2)$ is not small; it is either 0 or $q/2$. This breaks lattice BDD attacks which assume short error vectors.
+  
+  \item \textbf{Subset-guessing lower bound:} Our empirical analysis (\S\ref{sec:lblo}) shows that the best known attack requires guessing $n$ bits of the $\mu$ vector, costing $2^n$ work.
+\end{enumerate}
+
+\textbf{Potential novel attacks (open problems):}
+\begin{itemize}
+  \item \textbf{Algebraic structure exploitation:} The $q/2$ offset creates algebraic structure (parity over $\mathbb{Z}_q$). We tested for exploitable correlations and found none, but this remains an open research direction.
+  
+  \item \textbf{Multi-instance attacks:} If an adversary has access to multiple circuits encrypted under \emph{related} secrets, cross-circuit attacks may be possible. Our threat model assumes independent secrets.
+  
+  \item \textbf{Specialized lattice algorithms:} Our construction may be vulnerable to lattice algorithms tailored for binary offset rather than Gaussian noise. We are not aware of such algorithms, but their development would invalidate our security estimates.
+\end{itemize}
+
+\textbf{Limitations of our analysis:} Our experiments do not rule out:
+\begin{itemize}
+  \item Attacks exploiting joint structure across multiple LBLO instances (multi-target/multi-instance).
+  \item Highly optimized bespoke lattice or algebraic techniques beyond BKZ-50.
+  \item Attacks that combine information from the 1-bit on-chain oracle with the LBLO public data.
+  \item Reductions from LBLO to a different, potentially easier hard problem.
+\end{itemize}
+
+\textbf{Call for independent analysis:} We encourage the cryptographic community to analyze the LBLO problem independently. Our attack suite is available at \texttt{scripts/lblo\_attack.py}; we welcome attempts to break it. We view the LBLO problem and our noiseless construction as \emph{experimental}. We do not recommend using current parameters for high-value, long-lived secrets until further independent cryptanalysis is available.
 
 \subsection{Security Definitions}
 
@@ -654,15 +706,30 @@ An obfuscator $\obf$ is $(t, \varepsilon)$-extraction resistant if for all adver
 \]
 \end{definition}
 
-\begin{definition}[\lwe{} Control Function Security]
-Control function encoding is secure if no \ppt{} adversary can recover CF bits from \lwe{} ciphertexts with non-negligible advantage under \lwe{} hardness.
+\begin{definition}[Control-Function Hiding (Informal)]
+\label{def:cf-hiding}
+Let $\mathsf{Enc}_s(\mu) = (a, \langle a, s \rangle + \mu \cdot (q/2) \mod q)$ be our encoding scheme where $a \leftarrow \mathbb{Z}_q^n$ is uniform, $s \in \mathbb{Z}_q^n$ is the secret, and $\mu \in \{0,1\}$ is the control-function bit.
+
+We say the encoding provides \emph{control-function hiding} if, for uniform $s$ unknown to the adversary:
+\[
+\Pr[\adv((a_1, b_1), \ldots, (a_m, b_m)) \text{ recovers any } \mu_i] \leq \mathsf{negl}(\lambda)
+\]
+where the probability is over the choice of $a_i$ and the adversary's coins.
+\end{definition}
+
+\begin{remark}[Relation to Standard LWE]
+Definition~\ref{def:cf-hiding} captures what we need: an adversary cannot determine $\mu_i$ values without knowing $s$. This is \emph{weaker} than standard LWE semantic security (which requires indistinguishability from uniform). Our construction lacks noise, so LWE reductions do not apply. Instead, security relies on the empirical observation that recovering $s$ requires exhaustive search over $2^n$ subset guesses (see \S\ref{sec:lblo}). We explicitly do \emph{not} claim a reduction to standard LWE hardness.
+\end{remark}
+
+\begin{definition}[LBLO Control Function Security]
+Control function encoding is secure if no \ppt{} adversary can recover CF bits from LBLO ciphertexts with non-negligible advantage under LBLO hardness (Definition~\ref{def:lblo}).
 \end{definition}
 
 \subsection{Assumptions}
 
-\begin{assumption}[\lwe{} Hardness]
-\label{asm:lwe}
-The Learning With Errors problem is computationally hard for the chosen parameters.
+\begin{assumption}[LBLO Hardness]
+\label{asm:lblo}
+The Learning with Binary Large Offset problem (Definition~\ref{def:lblo}) is computationally hard for the chosen parameters. This is a conjecture based on empirical analysis (\S\ref{sec:lblo}), not a reduction to standard LWE.
 \end{assumption}
 
 \begin{assumption}[Topology Empirical Security]
@@ -674,7 +741,7 @@ The topology layer's wire selection algorithm defeats the structural and statist
 
 \begin{theorem}[\tlos{} Attack Resistance]
 \label{thm:main}
-Under Assumption~\ref{asm:lwe} (\lwe{} hardness), Assumption~\ref{asm:topology} (topology empirical security), and the wrong-key-gives-garbage property (1-bit on-chain oracle with no subcircuit access), \tlos{} achieves extraction resistance against our 9-class attack matrix.
+Under Assumption~\ref{asm:lblo} (LBLO hardness), Assumption~\ref{asm:topology} (topology empirical security), and the wrong-key-gives-garbage property (1-bit on-chain oracle with no subcircuit access), \tlos{} achieves extraction resistance against our 9-class attack matrix.
 \end{theorem}
 
 \begin{proof}
@@ -684,23 +751,23 @@ We consider each attack class:
 
 \textbf{Statistical attacks:} Statistical (Chi-squared) and DiagonalCorrelation attacks rely on non-uniform wire usage and input-output correlation. The topology layer enforces uniform wire usage and uses 64+ wires with irregular layers. \emph{Empirically validated} (Assumption~\ref{asm:topology}).
 
-\textbf{Semantic attacks:} RainbowTable requires subcircuit evaluation. The \lwe{} layer hides control functions via ciphertexts with on-chain inner products. Recovering CFs requires solving \lwe{} (Assumption~\ref{asm:lwe}).
+\textbf{Semantic attacks:} RainbowTable requires subcircuit evaluation. The LBLO layer hides control functions via ciphertexts with on-chain inner products. Recovering CFs requires solving LBLO (Assumption~\ref{asm:lblo}).
 
 Therefore, all 9 attack classes in our matrix are defeated under the stated assumptions. \emph{This is not a claim of universal security.}
 \end{proof}
 
 \subsection{Post-Quantum Security}
 
-\begin{proposition}[\tlos{} Post-Quantum Security]
-\tlos{} is post-quantum secure assuming \lwe{} is quantum-resistant.
+\begin{proposition}[\tlos{} Post-Quantum Security (Conjectured)]
+\tlos{} is conjectured to be post-quantum secure assuming LBLO is quantum-resistant.
 \end{proposition}
 
 \begin{proof}
 The topology layer uses no cryptographic primitives; it is purely structural and unaffected by quantum computers.
 
-The lattice layer uses \lwe{}, which is believed quantum-resistant and forms the basis of NIST post-quantum standards~\cite{FIPS203}.
+The LBLO layer is modeled after LWE, which is believed quantum-resistant and forms the basis of NIST post-quantum standards~\cite{FIPS203}. However, since LBLO is noiseless and lacks a formal reduction to standard LWE, post-quantum resistance is conjectured based on the absence of known quantum attacks, not proven.
 
-Therefore, \tlos{} inherits the quantum resistance of \lwe{}.
+Therefore, \tlos{} is conjectured to inherit the quantum resistance of LWE-style constructions, subject to the LBLO hardness assumption.
 \end{proof}
 
 
@@ -772,8 +839,8 @@ Structural (Butterfly) & Structural & Topology & \textsc{Blocked} \\
 Statistical (Chi-squared) & Statistical & Topology & \textsc{Blocked} \\
 DiagonalCorrelation & Statistical & Topology & \textsc{Blocked} \\
 \midrule
-\multicolumn{4}{l}{\textit{Semantic Attacks (Blocked by \lwe{} Layer)}} \\
-RainbowTable & Semantic & \lwe{} & \textsc{Blocked} \\
+\multicolumn{4}{l}{\textit{Semantic Attacks (Blocked by LBLO Layer)}} \\
+RainbowTable & Semantic & LBLO & \textsc{Blocked} \\
 \midrule
 \multicolumn{4}{l}{\textit{Advanced Attacks (Mitigated by Binary Output)}} \\
 SAT/Key Recovery & Algebraic & Binary output & \textsc{Mitigated} \\
@@ -823,8 +890,8 @@ We evaluated attack resistance with different layer combinations to understand e
 \midrule
 Baseline (no obfuscation) & 0/3 & 0/2 & 0/1 & 0/1 \\
 Topology only & 3/3 & 2/2 & 0/1 & 0/1 \\
-Topology + \lwe{} & 3/3 & 2/2 & 1/1 & 0/1 \\
-Topology + \lwe{} + Wire Binding (\tlos{}) & 3/3 & 2/2 & 1/1 & 1/1 \\
+Topology + LBLO & 3/3 & 2/2 & 1/1 & 0/1 \\
+Topology + LBLO + Wire Binding (\tlos{}) & 3/3 & 2/2 & 1/1 & 1/1 \\
 \bottomrule
 \end{tabular}
 \caption{Layer ablation: attacks defeated per category. Numbers in parentheses indicate total attacks in category.}
@@ -834,7 +901,7 @@ Topology + \lwe{} + Wire Binding (\tlos{}) & 3/3 & 2/2 & 1/1 & 1/1 \\
 \textbf{Key findings:}
 \begin{itemize}
   \item \textbf{Topology alone} defeats structural attacks (compression, pattern matching, butterfly detection) and statistical attacks (chi-squared, diagonal correlation), but \emph{not} semantic attacks.
-  \item \textbf{\lwe{} layer} is necessary to defeat semantic attacks (RainbowTable). Without LWE-hidden control functions, an attacker can evaluate subcircuits and match against known truth tables.
+  \item \textbf{LBLO layer} is necessary to defeat semantic attacks (RainbowTable). Without LBLO-hidden control functions, an attacker can evaluate subcircuits and match against known truth tables.
   \item \textbf{Wire binding layer} is necessary to prevent mix-and-match attacks. Without wire binding, an attacker can evaluate gates with inconsistent wire values from different execution paths.
 \end{itemize}
 
@@ -957,7 +1024,7 @@ where $\mathsf{wires}_k$ is the packed wire state after batch $k$, and addition 
 \begin{itemize}
   \item Cryptographic hiding: The linear map is public and invertible
   \item Collision resistance: Trivial to find $x$ given $Ax = y$
-  \item Key extraction resistance: Still relies on the \lwe{} layer for control function hiding
+  \item Key extraction resistance: Still relies on the LBLO layer for control function hiding
 \end{itemize}
 
 \subsection{Hybrid Security Model}
@@ -1125,22 +1192,22 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
 
 \begin{itemize}
   \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns. Empirically validated.
-  \item \textbf{\lwe{} layer (computational):} On-chain inner product computation hides control functions, defeating semantic attacks. ${\sim}98$-bit post-quantum security with $n{=}128$ using uniform secrets.
+  \item \textbf{LBLO layer (heuristic):} On-chain inner product computation hides control functions, defeating semantic attacks. \emph{Estimated} ${\sim}2^{98}$ post-quantum cost for known attacks with $n{=}128$; this is a heuristic estimate based on the LBLO problem (\S\ref{sec:lblo}), not a reduction to standard LWE.
   \item \textbf{Wire binding layer:} Full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, preventing mix-and-match attacks. Security: algebraic binding.
 \end{itemize}
 
-\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on \lwe{} hardness; the wire binding layer provides algebraic consistency. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on conjectured LBLO hardness; the wire binding layer provides algebraic consistency. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
 
 \textbf{Key contributions:}
 \begin{itemize}
-  \item On-chain \lwe{} inner products for true control function hiding
+  \item On-chain LBLO (LWE-like) inner products for control function hiding
   \item Wrong-key garbage property: attackers can simulate offline but learn nothing without the correct secret
   \item Wire binding: inter-gate consistency prevents mix-and-match attacks
   \item Practical gas costs within EVM block limits
   \item Honest comparison with hash-compare baseline (Section~\ref{sec:hash-compare})
 \end{itemize}
 
-\textbf{Limitations:} Topology security is heuristic, not proven. Gas costs (${\sim}8.5$M) may be prohibitive for frequent operations.
+\textbf{Limitations:} Topology security is heuristic, not proven. LBLO security is conjectured based on empirical attack analysis, not proven via reduction to standard assumptions. Gas costs (${\sim}8.5$M) may be prohibitive for frequent operations. We do not recommend current parameters for high-value, long-lived secrets until further independent cryptanalysis validates the LBLO hardness conjecture.
 
 \textbf{Future Work:}
 \begin{itemize}

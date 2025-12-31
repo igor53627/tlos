@@ -42,9 +42,9 @@
 \begin{abstract}
 We present \tlos{}, a practical circuit obfuscation framework for EVM smart contracts that resists specific attack classes (structural, semantic, mix-and-match) with practical gas costs.
 
-\tlos{} uses a three-layer security model: (1)~topology mixing complicates structural attacks via non-power-of-2 wire distances and uniform wire usage, (2)~Learning With Errors (\lwe{}) inner products computed on-chain hide gate control functions, and (3)~a full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, ensuring that an adversary cannot mix outputs from different execution paths.
+\tlos{} uses a three-layer security model: (1)~topology mixing complicates structural attacks via non-power-of-2 wire distances and uniform wire usage, (2)~noiseless LWE-like (LBLO) inner products computed on-chain hide gate control functions, and (3)~a full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, ensuring that an adversary cannot mix outputs from different execution paths.
 
-\tlos{} achieves ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank $64{\times}64$ wire binding. Security estimates (${\sim}2^{98}$ PQ) are based on heuristic modeling of our LWE-like construction; see \S\ref{sec:lwe-params} for full parameterization. Target applications include predicates with eventually-expiring secrets, particularly \emph{low-entropy secrets} (passwords, phrases, small ranges) where \tlos{} provides significant advantage over simple hash commitments by making each guess computationally expensive.
+\tlos{} achieves ${\sim}8.5$M gas with $n{=}128$ LBLO (LWE-like) dimension and full-rank $64{\times}64$ wire binding. Security estimates (${\sim}2^{98}$ PQ) are based on heuristic modeling of our noiseless LBLO construction; see \S\ref{sec:lwe-params} for full parameterization. Target applications include predicates with eventually-expiring secrets, particularly \emph{low-entropy secrets} (passwords, phrases, small ranges) where \tlos{} provides significant advantage over simple hash commitments by making each guess computationally expensive.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -60,7 +60,7 @@ Indistinguishability obfuscation (iO) from lattices~\cite{MDS25} achieves strong
 \textbf{Three-Layer Security Model:}
 \begin{enumerate}
 \item \textbf{Topology:} Structural mixing complicates structural/statistical attacks. \emph{Security: heuristic.}
-\item \textbf{\lwe{}:} On-chain inner products hide control functions. \emph{Security: estimated ${\sim}2^{98}$ PQ with $n{=}128$.}
+\item \textbf{LBLO (LWE-like, noiseless):} On-chain inner products hide control functions. \emph{Security: heuristic estimate ${\sim}2^{98}$ PQ for our LBLO parameters; not standard LWE (see \S\ref{sec:lwe-params}).}
 \item \textbf{Wire Binding:} Full-rank linear hash binds wire values across gates, preventing mix-and-match. \emph{Security: algebraic binding (bijective map).}
 \end{enumerate}
 }}
@@ -96,7 +96,7 @@ Range 0--100K & $<$0.1 ms & $\sim$2.8 hours \\
 4-word phrase (2048\textsuperscript{4}) & $\sim$18 sec & $\sim$5 years \\
 \bottomrule
 \end{tabular}
-\caption{Offline brute-force cost comparison. \textsuperscript{$\dagger$}For high-entropy secrets, \tlos{} security is bounded by LWE hardness (${\sim}2^{98}$ with $n{=}128$). Assumptions: keccak at $10^9$ hashes/s, \tlos{} at 100\,ms/guess.}
+\caption{Offline brute-force cost comparison. \textsuperscript{$\dagger$}For high-entropy secrets, \tlos{} security is bounded by the conjectured hardness of our LBLO construction (heuristic estimate ${\sim}2^{98}$ with $n{=}128$; see \S\ref{sec:lwe-params}). Assumptions: keccak at $10^9$ hashes/s, \tlos{} at 100\,ms/guess.}
 \label{tab:comparison}
 \end{table}
 
@@ -110,11 +110,11 @@ Range 0--100K & $<$0.1 ms & $\sim$2.8 hours \\
 \item \textbf{Gas is cheap:} At 0.03 gwei, 8.5M gas $\approx$ \$0.80
 \end{itemize}
 
-Under these constraints, \tlos{} provides the \emph{only} way to make low-entropy secret verification expensive on EVM---no memory-hard KDF (Argon2/scrypt) exists as a precompile.
+Under these constraints, \tlos{} provides a practical way to make low-entropy secret verification expensive on EVM---no memory-hard KDF (Argon2/scrypt) exists as an EVM precompile.
 
 \subsection{Why Not Keccak?}
 
-\textbf{Low-entropy secrets.} Keccak can be brute-forced at ${\sim}1$ns/guess. \tlos{} transforms each guess into expensive LWE computation (${\sim}100$ms/guess), a $10^8\times$ slowdown.
+\textbf{Low-entropy secrets.} Keccak can be brute-forced at ${\sim}1$ns/guess. \tlos{} transforms each guess into an expensive LBLO-style (noiseless LWE-like) inner-product computation (${\sim}100$ms/guess), a $10^8\times$ slowdown.
 
 \textbf{Multi-bit payloads.} With keccak, a payload requires separate ciphertext $\mathsf{Enc}_k(\mathsf{payload})$ alongside $\mathsf{keccak256}(k)$. Attackers who crack $k$ decrypt offline. In \tlos{}, payload is \emph{fused} into the circuit.
 
@@ -214,7 +214,7 @@ Error term $e$ & \textbf{None} (see below) \\
 
 \textbf{Why no error term?} EVM requires deterministic execution---probabilistic decoding failures would break on-chain verification. The tradeoff: we get \emph{perfect correctness} (0\% decoding error) but lose standard \lwe{} semantic security guarantees. Security relies on the difficulty of recovering $s$ without knowing the $\mu$ bits; subset attacks require $2^n$ guesses (see below).
 
-\textbf{Security estimate (heuristic):} Our implementation does \emph{not} add an independent error term, so this is not standard LWE. The ${\sim}2^{98}$ PQ estimate is based on heuristic modeling as LWE$(n{=}128, q{=}65521, m{=}2560)$ with small error using the lattice estimator~\cite{APS15}. This should be interpreted as a rough complexity yardstick, not a rigorous reduction.
+\textbf{Security estimate (heuristic):} Our implementation does \emph{not} add an independent error term, so this is not standard LWE. The ${\sim}2^{98}$ PQ estimate is based on heuristic modeling as LWE$(n{=}128, q{=}65521, m{=}2560)$ using the lattice estimator~\cite{APS15}. \textbf{This should be interpreted as a rough complexity yardstick, not a formal security guarantee.} Standard LWE security reductions (to GapSVP, SIVP) do not apply. Security relies on the empirical observation that the best known attack (subset guessing) requires $2^n$ work.
 
 \textbf{Binary-Offset Hardness:} Our construction is ``Learning with Binary Large Offset'' (LBLO): $b_i = \langle a_i, s \rangle + \mu_i \cdot (q/2) \mod q$ where $\mu_i \in \{0,1\}$. We implemented and tested 9 attack classes (\texttt{scripts/lblo\_attack.py}):
 
@@ -255,7 +255,7 @@ $n$ & Rate (ops/s) & Full $2^n$ time & Extrapolated $n{=}128$ \\
 
 \noindent Attack parallelizes trivially, but even with $10^9$ machines: $10^{19}$ years.
 
-\noindent\textbf{Caveat:} Absence of known attacks $\neq$ proven security. The ${\sim}2^{98}$ estimate is a heuristic lower bound.
+\noindent\textbf{Caveat:} Absence of known attacks $\neq$ proven security. The ${\sim}2^{98}$ estimate is a \emph{heuristic} lower bound based on the best known attacks, not a formal security guarantee. Standard LWE reductions do not apply to our noiseless construction. We encourage independent cryptanalysis of the LBLO problem; our attack suite is available at \texttt{scripts/lblo\_attack.py}.
 
 %------------------------------------------------------------------------------
 \section{Security}
@@ -269,7 +269,7 @@ $n$ & Rate (ops/s) & Full $2^n$ time & Extrapolated $n{=}128$ \\
 \toprule
 \textbf{Component} & \textbf{Basis} & \textbf{Est.\ Security} \\
 \midrule
-CF hiding & \lwe{}-like ($n{=}128$, $q{=}65521$, $m{=}2560$) & ${\sim}2^{98}$ PQ (heuristic) \\
+CF hiding & LBLO (noiseless LWE-like, $n{=}128$) & ${\sim}2^{98}$ PQ (heuristic) \\
 Wire binding & Full-rank 64$\times$64 linear map & Algebraic binding \\
 Topology & Heuristic & Empirical (\S\ref{sec:topology-exp}) \\
 \bottomrule
@@ -278,7 +278,7 @@ Topology & Heuristic & Empirical (\S\ref{sec:topology-exp}) \\
 \label{tab:security}
 \end{table}
 
-We estimate ${\sim}2^{98}$ post-quantum cost against the underlying \lwe{} instances with $n{=}128$ using standard lattice estimators. This security level is suitable for:
+We estimate ${\sim}2^{98}$ post-quantum cost against the underlying LBLO instances by heuristically modeling them as LWE$(n{=}128, q{=}65521, m{=}2560)$ in standard lattice estimators. This should be interpreted as a rough complexity \emph{yardstick}, not a formal LWE-based security guarantee (see \S\ref{sec:lwe-params}). This security level is suitable for:
 \begin{itemize}
 \item Medium-term secrets (weeks--months)
 \item Production applications with moderate value
@@ -292,7 +292,7 @@ For higher security (${\sim}2^{128}$ PQ), $n \geq 256$ would be needed (requires
 \begin{itemize}
 \item \textbf{Mix-and-match detection:} Any attempt to evaluate gates with inconsistent inputs will, except with negligible probability, yield a final accumulator that does not match the expected value.
 \item \textbf{Execution trace binding:} Full evaluation history is committed.
-\item \textbf{Lattice-style construction:} Uses the same linear algebra as the \lwe{} layer for design uniformity; its security role is \emph{integrity/binding}: for a fixed full-rank $A$, each accumulator state has a unique preimage in $\mathbb{Z}_q^{64}$ under $H$.
+\item \textbf{Lattice-style construction:} Uses the same linear algebra as the LBLO layer for design uniformity; its security role is \emph{integrity/binding}: for a fixed full-rank $A$, each accumulator state has a unique preimage in $\mathbb{Z}_q^{64}$ under $H$.
 \end{itemize}
 
 \subsection{Limitations}
@@ -366,19 +366,19 @@ We evaluated attack resistance with different layer combinations:
 \midrule
 Baseline (no obfuscation) & 0/3 & 0/1 & 0/1 \\
 Topology only & 3/3 & 0/1 & 0/1 \\
-Topology + \lwe{} & 3/3 & 1/1 & 0/1 \\
-Topology + \lwe{} + Wire Binding & 3/3 & 1/1 & 1/1 \\
+Topology + LBLO & 3/3 & 1/1 & 0/1 \\
+Topology + LBLO + Wire Binding & 3/3 & 1/1 & 1/1 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Key findings:} (1)~Topology alone defeats structural attacks but not semantic (RainbowTable) attacks. (2)~\lwe{} is necessary to hide control functions from semantic analysis. (3)~Wire binding is necessary to prevent mix-and-match---without it, an attacker can evaluate gates with inconsistent wire values.
+\textbf{Key findings:} (1)~Topology alone defeats structural attacks but not semantic (RainbowTable) attacks. (2)~LBLO is necessary to hide control functions from semantic analysis. (3)~Wire binding is necessary to prevent mix-and-match---without it, an attacker can evaluate gates with inconsistent wire values.
 
 %------------------------------------------------------------------------------
 \section{Conclusion}
 %------------------------------------------------------------------------------
 
-\tlos{} is a practical circuit obfuscation framework for EVM using lattice assumptions, achieving estimated ${\sim}2^{98}$ post-quantum security (heuristic, see \S\ref{sec:lwe-params}) at ${\sim}8.5$M gas with $n{=}128$ and full-rank wire binding. The three-layer design (topology + \lwe{} control function hiding + full-rank wire binding) provides resistance against structural, statistical, semantic, and mix-and-match attacks.
+\tlos{} is a practical circuit obfuscation framework for EVM using lattice-inspired assumptions, achieving estimated ${\sim}2^{98}$ post-quantum security (heuristic, see \S\ref{sec:lwe-params}) at ${\sim}8.5$M gas with $n{=}128$ and full-rank wire binding. The three-layer design (topology + LBLO (LWE-like) control function hiding + full-rank wire binding) provides resistance against structural, statistical, semantic, and mix-and-match attacks.
 
 Key insight: \tlos{} provides significant advantage over simple hash commitments for \emph{low-entropy secrets} by making each guess computationally expensive. Its value is in making low-entropy guesses expensive under EVM constraints and enabling richer obfuscated logic.
 
