@@ -49,7 +49,7 @@
 \begin{abstract}
 We present \tlos{} (Topology-Lattice Obfuscation with SEH), a practical circuit obfuscation framework for EVM that adds inter-gate wire consistency via a full-rank linear hash we call SEH (inspired by subspace-evasive hashing~\cite{MDS25}). \tlos{} uses a three-layer security model: a topology layer that defeats structural and statistical attacks, a lattice layer using on-chain \lwe{} inner products that defeats semantic attacks, and an SEH layer that binds wire values across gates to prevent mix-and-match attacks.
 
-\tlos{} achieves 6/6 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank 64$\times$64 SEH. Control functions are hidden via \lwe{} ciphertexts; SEH ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank 64$\times$64 SEH. Control functions are hidden via \lwe{} ciphertexts; SEH ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \subsection{Contributions}
 
 \begin{enumerate}
-  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain \lwe{} inner products, and a full-rank linear SEH layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ SEH matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 6/6 resistance in our attack evaluation matrix.
+  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain \lwe{} inner products, and a full-rank linear SEH layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ SEH matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 9/9 resistance in our attack evaluation matrix.
   
   \item \textbf{Structural Mixing:} Wire selection algorithm defeating structural and statistical attacks through non-pow2 distances, uniform wire usage, and irregular layers. Security is heuristic and empirically validated.
   
@@ -131,7 +131,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \textbf{What \tlos{} provides:}
 \begin{itemize}
   \item Computational security based on \lwe{} hardness (see Table~\ref{tab:lwe-security} for estimates: ${\sim}203$-bit classical for $n{=}128$ with uniform secrets) plus empirical heuristics (topology layer)
-  \item Attack resistance (6/6 in our evaluation matrix; not a universal security claim)
+  \item Attack resistance (9/9 in our evaluation matrix; not a universal security claim)
   \item Practical gas costs (${\sim}8.5$M for $n{=}128$, 28\% of block limit)
   \item Post-quantum resistance (relative to \lwe{} parameters)
   \item Public evaluation: no secret keys required to evaluate the circuit on-chain
@@ -143,7 +143,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \textbf{What \tlos{} does NOT provide:}
 \begin{itemize}
   \item Permanent indistinguishability obfuscation (iO); we do not claim that obfuscations of equivalent circuits are indistinguishable
-  \item Universal security against all possible attacks; we resist our 6-class taxonomy only
+  \item Universal security against all possible attacks; we resist our 9-class taxonomy only
   \item Forward secrecy for long-lived secrets (expired secrets may be analyzed retroactively)
   \item Protection against protocol logic bugs, economic/incentive attacks, or EVM-level side channels
   \item Security after \lwe{} compromise: if an adversary recovers all control function bits (e.g., by solving the underlying \lwe{} instances), the circuit becomes a fully specified reversible circuit that can be inverted gate-by-gate in linear time. The topology layer offers no post-compromise security; it only increases the cost of \emph{pre-compromise} structural and statistical attacks
@@ -1083,7 +1083,7 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
 \subsection{Theoretical Gaps}
 
 \begin{enumerate}
-  \item \textbf{Topology security is empirical:} We validate against our 6-class attack suite but cannot prove no faster attack exists. Future attacks may defeat the topology layer.
+  \item \textbf{Topology security is empirical:} We validate against our 9-class attack suite but cannot prove no faster attack exists. Future attacks may defeat the topology layer.
   
   \item \textbf{No iO guarantee:} We do not prove indistinguishability of obfuscations of equivalent circuits. \tlos{} obfuscations may be distinguishable.
   
@@ -1113,7 +1113,7 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
   
   \item \textbf{VBB Security:} Virtual black-box is impossible in general~\cite{BGI12}.
   
-  \item \textbf{Universal Security:} We resist our 6-class taxonomy, not all possible attacks.
+  \item \textbf{Universal Security:} We resist our 9-class taxonomy, not all possible attacks.
 \end{enumerate}
 
 %------------------------------------------------------------------------------
@@ -1128,7 +1128,7 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
   \item \textbf{SEH layer (wire binding):} Full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, preventing mix-and-match attacks. Security: algebraic binding.
 \end{itemize}
 
-\tlos{} achieves 6/6 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on \lwe{} hardness; SEH provides algebraic wire binding. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on \lwe{} hardness; SEH provides algebraic wire binding. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
 
 \textbf{Key contributions:}
 \begin{itemize}
