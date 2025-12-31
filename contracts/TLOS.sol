@@ -4,41 +4,44 @@ pragma solidity ^0.8.20;
 import "./interfaces/IHoneypot.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
-/// @title TLOSLWE - TLOS with full-rank SEH binding (n=128 LWE, ~98-bit PQ)
-/// @notice Uses 64x64 matrix-vector product for inter-gate consistency
-/// @dev Based on Ma-Dai-Shi 2025 SEH. Full-rank matrix fixes nullspace issue.
+/// @title TLOS - Topology-Lattice Obfuscation for Smart Contracts
+/// @notice Uses LBLO (noiseless LWE-like) for control function hiding and
+///         full-rank 64x64 linear map for inter-gate wire binding
+/// @dev Wire binding inspired by Ma-Dai-Shi 2025, but NOT subspace-evasive.
+///      Security is heuristic, not based on standard LWE reductions.
 ///
-/// LWE Configuration:
-/// - n=128 dimension, q=65521 (provides ~98-bit PQ security)
+/// LBLO Configuration:
+/// - n=128 dimension, q=65521 (heuristic ~2^98 PQ security)
 /// - 128-element inner products with single mod at end
+/// - Noiseless: no Gaussian error term (deterministic encoding)
 ///
-/// SEH Construction:
+/// Wire Binding Construction:
 /// - Matrix A is derived from circuit seed (64 x 64 matrix of u16 mod q)
 /// - H(wires) = A * wires mod q (64-element output vector, 1024 bits)
-/// - Each batch (128 gates) updates: sehAcc = H(sehAcc XOR wires, batchEnd)
-/// - Full-rank A has trivial kernel -> collision resistance
+/// - Each batch (128 gates) updates: bindingAcc = H(bindingAcc XOR wires, batchEnd)
+/// - Full-rank A provides algebraic binding (unique preimage), not cryptographic hiding
 /// - PRG optimization: 16 coefficients per keccak (320 calls vs 4096)
 ///
 /// Gas: ~8.5M for 640 gates (28% of block limit)
-contract TLOSLWE is IHoneypot {
+contract TLOS is IHoneypot {
     uint256 public constant COMMIT_DELAY = 2;
     uint256 public constant Q = 65521;
-    uint256 public constant LWE_N = 128;
+    uint256 public constant LBLO_N = 128;
     uint256 public constant THRESHOLD = Q / 4;
-    uint256 public constant SEH_ROWS = 64;  // Full-rank 64x64 matrix
+    uint256 public constant BINDING_ROWS = 64;  // Full-rank 64x64 matrix
     
     address public immutable circuitDataPointer;
     uint8 public immutable numWires;
     uint32 public immutable numGates;
     bytes32 public immutable expectedOutputHash;
-    bytes32 public immutable circuitSeed;  // Used to derive SEH matrix
+    bytes32 public immutable circuitSeed;  // Used to derive wire binding matrix
     uint256 public immutable secretExpiry;
     
-    // Expected SEH output (64 x u16 = 1024 bits, stored as 4 x uint256)
-    uint256 public immutable expectedSehOutput0;
-    uint256 public immutable expectedSehOutput1;
-    uint256 public immutable expectedSehOutput2;
-    uint256 public immutable expectedSehOutput3;
+    // Expected wire binding output (64 x u16 = 1024 bits, stored as 4 x uint256)
+    uint256 public immutable expectedBindingOutput0;
+    uint256 public immutable expectedBindingOutput1;
+    uint256 public immutable expectedBindingOutput2;
+    uint256 public immutable expectedBindingOutput3;
     
     uint256 private _reward;
     bool private _claimed;
@@ -56,7 +59,7 @@ contract TLOSLWE is IHoneypot {
         uint32 _numGates,
         bytes32 _expectedOutputHash,
         bytes32 _circuitSeed,
-        uint256[4] memory _expectedSehOutput,
+        uint256[4] memory _expectedBindingOutput,
         uint256 _secretExpiry
     ) payable {
         require(_numWires > 0 && _numWires <= 64, "Wires must be 1-64");
@@ -69,10 +72,10 @@ contract TLOSLWE is IHoneypot {
         numGates = _numGates;
         expectedOutputHash = _expectedOutputHash;
         circuitSeed = _circuitSeed;
-        expectedSehOutput0 = _expectedSehOutput[0];
-        expectedSehOutput1 = _expectedSehOutput[1];
-        expectedSehOutput2 = _expectedSehOutput[2];
-        expectedSehOutput3 = _expectedSehOutput[3];
+        expectedBindingOutput0 = _expectedBindingOutput[0];
+        expectedBindingOutput1 = _expectedBindingOutput[1];
+        expectedBindingOutput2 = _expectedBindingOutput[2];
+        expectedBindingOutput3 = _expectedBindingOutput[3];
         secretExpiry = _secretExpiry;
         owner = msg.sender;
         _reward = msg.value;
@@ -107,7 +110,7 @@ contract TLOSLWE is IHoneypot {
         return valid;
     }
     
-    function checkWithSeh(bytes32 input) external view returns (bool valid, uint256[4] memory sehOutput) {
+    function checkWithBinding(bytes32 input) external view returns (bool valid, uint256[4] memory bindingOutput) {
         return _evaluate(input);
     }
     
@@ -129,7 +132,7 @@ contract TLOSLWE is IHoneypot {
     
     function commitDelay() external pure override returns (uint256) { return COMMIT_DELAY; }
     function reward() external view override returns (uint256) { return _reward; }
-    function scheme() external pure override returns (string memory) { return "tlos-lwe"; }
+    function scheme() external pure override returns (string memory) { return "tlos-lblo"; }
     function encryptedGates() external pure override returns (uint256) { return 640; }
     function estimatedGas() external pure override returns (uint256) { return 50_000_000; }
     function isExpired() external view returns (bool) { return block.timestamp >= secretExpiry; }
@@ -138,12 +141,12 @@ contract TLOSLWE is IHoneypot {
         return secretExpiry - block.timestamp;
     }
     
-    /// @notice Compute full-rank SEH hash: H(x) = A*x mod q where A is 64x64
+    /// @notice Compute full-rank wire binding hash: H(x) = A*x mod q where A is 64x64
     /// @param input Wire values as bits (packed into uint256)
     /// @param gateIdx Gate index for matrix derivation
     /// @return output 64 x u16 packed into 4 x uint256 (1024 bits)
     /// @dev Optimized: derives 16 coefficients per keccak (320 calls vs 4096)
-    function _sehHash(uint256 input, uint256 gateIdx) internal view returns (uint256[4] memory output) {
+    function _wireBindingHash(uint256 input, uint256 gateIdx) internal view returns (uint256[4] memory output) {
         uint256 q = Q;
         uint256 nWires = numWires;
         bytes32 seed = circuitSeed;
@@ -198,22 +201,22 @@ contract TLOSLWE is IHoneypot {
         }
     }
     
-    function _evaluate(bytes32 input) internal view returns (bool valid, uint256[4] memory sehOutput) {
+    function _evaluate(bytes32 input) internal view returns (bool valid, uint256[4] memory bindingOutput) {
         uint256 wires = uint256(input) & ((1 << numWires) - 1);
         bytes memory cd = SSTORE2.read(circuitDataPointer);
         
         // Store 128-element secret in memory array to avoid stack depth issues
         uint256[8] memory s = _deriveSecret128Array(input);
         
-        // Initialize SEH accumulator (full-rank 64x64 hash of initial wires)
-        uint256[4] memory sehAcc = _sehHash(wires, 0);
+        // Initialize wire binding accumulator (full-rank 64x64 hash of initial wires)
+        uint256[4] memory bindingAcc = _wireBindingHash(wires, 0);
         
         uint256 gateCount = numGates;
         uint256 q = Q;
         uint256 threshold = THRESHOLD;
         
-        // Process gates in batches for SEH updates (batch size = 128 for gas efficiency)
-        // Larger batches = fewer SEH updates = less gas
+        // Process gates in batches for wire binding updates (batch size = 128 for gas efficiency)
+        // Larger batches = fewer binding updates = less gas
         uint256 batchSize = 128;
         
         for (uint256 batchStart = 0; batchStart < gateCount; batchStart += batchSize) {
@@ -283,24 +286,24 @@ contract TLOSLWE is IHoneypot {
                 }
             }
             
-            // Update SEH after each batch using full-rank hash (per-batch binding)
-            // Combines previous sehAcc XOR wires into new accumulator
-            uint256 combined = sehAcc[0] ^ sehAcc[1] ^ sehAcc[2] ^ sehAcc[3] ^ wires;
-            sehAcc = _sehHash(combined, batchEnd);
+            // Update wire binding after each batch using full-rank hash (per-batch binding)
+            // Combines previous bindingAcc XOR wires into new accumulator
+            uint256 combined = bindingAcc[0] ^ bindingAcc[1] ^ bindingAcc[2] ^ bindingAcc[3] ^ wires;
+            bindingAcc = _wireBindingHash(combined, batchEnd);
         }
         
-        // Final SEH is the accumulated full-rank hash
-        sehOutput = sehAcc;
+        // Final wire binding is the accumulated full-rank hash
+        bindingOutput = bindingAcc;
         
         bytes32 outputHash = keccak256(abi.encodePacked(wires));
         valid = (outputHash == expectedOutputHash) && 
-                (sehOutput[0] == expectedSehOutput0) &&
-                (sehOutput[1] == expectedSehOutput1) &&
-                (sehOutput[2] == expectedSehOutput2) &&
-                (sehOutput[3] == expectedSehOutput3);
+                (bindingOutput[0] == expectedBindingOutput0) &&
+                (bindingOutput[1] == expectedBindingOutput1) &&
+                (bindingOutput[2] == expectedBindingOutput2) &&
+                (bindingOutput[3] == expectedBindingOutput3);
     }
     
-    /// @dev Derive 128-element LWE secret vector from input
+    /// @dev Derive 128-element LBLO secret vector from input
     /// Returns 8 x uint256 (128 x u16 packed) as memory array
     function _deriveSecret128Array(bytes32 input) internal pure returns (uint256[8] memory s) {
         bytes32[8] memory h;

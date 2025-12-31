@@ -131,14 +131,14 @@ forge script scripts/BenchmarkTLOS.s.sol --rpc-url "$TENDERLY_RPC" --broadcast -
 ```
 tlos/
 ├── contracts/
-│   ├── TLOSLWE.sol         # Main contract (LBLO + wire binding; legacy "LWE" name)
+│   ├── TLOS.sol            # Main contract (LBLO + wire binding)
 │   ├── interfaces/
 │   └── legacy/
 │       └── TLOSKeccak.sol  # Classical only, deprecated
 ├── src/                     # Rust implementation
 │   ├── circuit.rs          # Circuit/gate structures
-│   ├── lwe.rs              # LBLO (noiseless LWE-like) encoding
-│   ├── seh_lwe.rs          # Wire binding implementation (legacy "SEH/LWE" filename)
+│   ├── lblo.rs             # LBLO (noiseless LWE-like) encoding
+│   ├── wire_binding.rs     # Wire binding implementation
 │   ├── generator.rs        # Deployment generator
 │   └── bin/
 │       └── generate_tlos.rs # CLI binary
@@ -147,7 +147,7 @@ tlos/
 │   └── lblo_attack*.py     # LBLO attack analysis scripts
 ├── docs/
 │   ├── security.md         # Security model
-│   └── seh-wire-binding.md # Wire binding details (legacy "SEH" name)
+│   └── wire-binding.md     # Wire binding details
 ├── paper/
 │   ├── tlos-paper.pdf      # Full paper (source of truth)
 │   └── tlos.pdf            # Short paper

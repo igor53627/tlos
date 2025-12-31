@@ -3,10 +3,10 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
-import "../contracts/TLOSLWE.sol";
+import "../contracts/TLOS.sol";
 
-/// @title Benchmark TLOS-LWE (Post-Quantum SEH) on Tenderly
-/// @notice The only PQ variant - measures full-rank 64x64 SEH gas costs with n=128 LWE
+/// @title Benchmark TLOS (LBLO + Wire Binding) on Tenderly
+/// @notice Measures gas costs for full-rank 64x64 wire binding with n=128 LBLO
 contract BenchmarkTLOS is Script {
     uint256 constant Q = 65521;
     address deployer = 0x05c84d05844bAc8bA8C535C3110ea3CFBA424bE9;
@@ -14,7 +14,7 @@ contract BenchmarkTLOS is Script {
     function run() external {
         vm.startBroadcast(deployer);
         
-        console.log("=== TLOS-LWE Gas Benchmark (n=128 LWE, Full-rank 64x64 SEH, 640 gates) ===");
+        console.log("=== TLOS Gas Benchmark (n=128 LBLO, Full-rank 64x64 Wire Binding, 640 gates) ===");
         console.log("");
         
         bytes memory circuitData = _generateData(640, 128);
@@ -24,32 +24,32 @@ contract BenchmarkTLOS is Script {
         console.log("Data pointer:", dataPtr);
         console.log("");
         
-        console.log("--- TLOS-LWE (Full-rank SEH, ~49-bit PQ) ---");
-        _benchmarkTLOSLWE(dataPtr);
+        console.log("--- TLOS (Full-rank Wire Binding, heuristic ~2^98 PQ) ---");
+        _benchmarkTLOS(dataPtr);
         
         vm.stopBroadcast();
         
         console.log("");
         console.log("=== Summary ===");
         console.log("Block gas limit: 30,000,000");
-        console.log("LWE Dimension: n=128 (~98-bit PQ security)");
-        console.log("SEH Matrix: 64x64 (full-rank, trivial kernel)");
+        console.log("LBLO Dimension: n=128 (heuristic ~2^98 PQ security)");
+        console.log("Wire Binding Matrix: 64x64 (full-rank, algebraic binding)");
     }
     
-    function _benchmarkTLOSLWE(address dataPtr) internal {
+    function _benchmarkTLOS(address dataPtr) internal {
         bytes32 testInput = bytes32(uint256(0x12345));
-        bytes32 circuitSeed = keccak256(abi.encodePacked("TLOS-LWE-Seed"));
+        bytes32 circuitSeed = keccak256(abi.encodePacked("TLOS-Seed"));
         
         bytes32 expectedOutputHash = keccak256(abi.encodePacked(uint256(testInput) & ((1 << 64) - 1)));
-        uint256[4] memory expectedSehOutput;
+        uint256[4] memory expectedBindingOutput;
         
-        TLOSLWE honeypot = new TLOSLWE(
+        TLOS honeypot = new TLOS(
             dataPtr,
             64,
             640,
             expectedOutputHash,
             circuitSeed,
-            expectedSehOutput,
+            expectedBindingOutput,
             block.timestamp + 1 days
         );
         
@@ -73,17 +73,17 @@ contract BenchmarkTLOS is Script {
             console.log("Estimated gas: >30,000,000 (exceeds block limit)");
         }
         
-        // Also test checkWithSeh
+        // Also test checkWithBinding
         console.log("");
-        console.log("--- checkWithSeh() ---");
+        console.log("--- checkWithBinding() ---");
         uint256 gasBefore2 = gasleft();
-        try honeypot.checkWithSeh(testInput) returns (bool valid2, uint256[4] memory sehOutput) {
+        try honeypot.checkWithBinding(testInput) returns (bool valid2, uint256[4] memory bindingOutput) {
             uint256 gasUsed2 = gasBefore2 - gasleft();
-            console.log("checkWithSeh() gas:", gasUsed2);
-            console.log("SEH output[0]:", sehOutput[0]);
+            console.log("checkWithBinding() gas:", gasUsed2);
+            console.log("Binding output[0]:", bindingOutput[0]);
             console.log("Valid:", valid2 ? "true" : "false");
         } catch {
-            console.log("[FAIL] checkWithSeh() reverted");
+            console.log("[FAIL] checkWithBinding() reverted");
         }
     }
     

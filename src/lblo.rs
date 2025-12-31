@@ -4,18 +4,18 @@ use sha3::{Digest, Keccak256};
 use crate::circuit::Gate;
 
 pub const Q: u16 = 65521;
-pub const LWE_N: usize = 128;
+pub const LBLO_N: usize = 128;
 pub const THRESHOLD: u16 = Q / 4;
 pub const CT_SIZE: usize = 258;
 pub const GATE_SIZE: usize = 1035;
 
 #[derive(Clone, Debug)]
-pub struct LweCiphertext {
-    pub a: [u16; LWE_N],
+pub struct LbloCiphertext {
+    pub a: [u16; LBLO_N],
     pub b: u16,
 }
 
-impl LweCiphertext {
+impl LbloCiphertext {
     pub fn to_bytes(&self) -> [u8; CT_SIZE] {
         let mut bytes = [0u8; CT_SIZE];
         for (i, &val) in self.a.iter().enumerate() {
@@ -28,8 +28,8 @@ impl LweCiphertext {
     }
 }
 
-pub fn derive_secret(input: [u8; 32]) -> [u16; LWE_N] {
-    let mut secret = [0u16; LWE_N];
+pub fn derive_secret(input: [u8; 32]) -> [u16; LBLO_N] {
+    let mut secret = [0u16; LBLO_N];
     for chunk_idx in 0..8 {
         let mut hasher = Keccak256::new();
         hasher.update(&input);
@@ -43,17 +43,17 @@ pub fn derive_secret(input: [u8; 32]) -> [u16; LWE_N] {
     secret
 }
 
-pub fn encrypt_bit(bit: bool, a: &[u16; LWE_N], secret: &[u16; LWE_N]) -> LweCiphertext {
+pub fn encrypt_bit(bit: bool, a: &[u16; LBLO_N], secret: &[u16; LBLO_N]) -> LbloCiphertext {
     let mut inner_prod: u32 = 0;
-    for i in 0..LWE_N {
+    for i in 0..LBLO_N {
         inner_prod = (inner_prod + (a[i] as u32) * (secret[i] as u32)) % (Q as u32);
     }
     let msg_encoding: u32 = if bit { (Q / 2) as u32 } else { 0 };
     let b = ((inner_prod + msg_encoding) % (Q as u32)) as u16;
-    LweCiphertext { a: *a, b }
+    LbloCiphertext { a: *a, b }
 }
 
-pub fn encode_gate(gate: &Gate, secret: &[u16; LWE_N], rng: &mut impl Rng) -> Vec<u8> {
+pub fn encode_gate(gate: &Gate, secret: &[u16; LBLO_N], rng: &mut impl Rng) -> Vec<u8> {
     let mut data = Vec::with_capacity(GATE_SIZE);
     data.push(gate.active());
     data.push(gate.control1());
@@ -61,7 +61,7 @@ pub fn encode_gate(gate: &Gate, secret: &[u16; LWE_N], rng: &mut impl Rng) -> Ve
 
     for tt_idx in 0..4 {
         let bit = (gate.control_function >> tt_idx) & 1 != 0;
-        let mut a = [0u16; LWE_N];
+        let mut a = [0u16; LBLO_N];
         for v in a.iter_mut() {
             *v = rng.gen_range(0..Q);
         }
@@ -84,13 +84,13 @@ mod tests {
         let input = [0u8; 32];
         let secret = derive_secret(input);
         let mut rng = ChaCha20Rng::seed_from_u64(0);
-        let mut a = [0u16; LWE_N];
+        let mut a = [0u16; LBLO_N];
         for v in a.iter_mut() {
             *v = rng.gen_range(0..Q);
         }
         let ct = encrypt_bit(false, &a, &secret);
         let mut inner_prod: u32 = 0;
-        for i in 0..LWE_N {
+        for i in 0..LBLO_N {
             inner_prod = (inner_prod + (ct.a[i] as u32) * (secret[i] as u32)) % (Q as u32);
         }
         let diff = ((ct.b as u32 + Q as u32) - inner_prod) % (Q as u32);
@@ -102,13 +102,13 @@ mod tests {
         let input = [1u8; 32];
         let secret = derive_secret(input);
         let mut rng = ChaCha20Rng::seed_from_u64(0);
-        let mut a = [0u16; LWE_N];
+        let mut a = [0u16; LBLO_N];
         for v in a.iter_mut() {
             *v = rng.gen_range(0..Q);
         }
         let ct = encrypt_bit(true, &a, &secret);
         let mut inner_prod: u32 = 0;
-        for i in 0..LWE_N {
+        for i in 0..LBLO_N {
             inner_prod = (inner_prod + (ct.a[i] as u32) * (secret[i] as u32)) % (Q as u32);
         }
         let diff = ((ct.b as u32 + Q as u32) - inner_prod) % (Q as u32);

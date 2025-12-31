@@ -41,8 +41,8 @@ fn main() {
         "Circuit seed: 0x{}",
         hex::encode(deployment.circuit_seed)
     );
-    println!("Expected SEH output (4 x u256, as lo|hi u128 pairs):");
-    for (i, (lo, hi)) in deployment.expected_seh_output.words.iter().enumerate() {
+    println!("Expected wire binding output (4 x u256, as lo|hi u128 pairs):");
+    for (i, (lo, hi)) in deployment.expected_binding_output.words.iter().enumerate() {
         println!("  [{i}]: lo=0x{lo:032x} hi=0x{hi:032x}");
     }
 

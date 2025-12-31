@@ -1,10 +1,10 @@
 use sha3::{Digest, Keccak256};
 
 pub const Q: u32 = 65521;
-pub const SEH_ROWS: usize = 64;
+pub const BINDING_ROWS: usize = 64;
 
-/// Compute full-rank SEH hash H(x) = A * x mod q where A is 64x64
-/// Mirrors TLOSLWE.sol::_sehHash exactly
+/// Compute full-rank wire binding hash H(x) = A * x mod q where A is 64x64
+/// Mirrors TLOS.sol::_wireBindingHash exactly
 ///
 /// - `input_bits`: lower `num_wires` bits contain the wire / combined state  
 /// - `gate_idx`: gate index (0 for init, batchEnd for updates)
@@ -14,15 +14,15 @@ pub const SEH_ROWS: usize = 64;
 ///
 /// Optimized: derives 16 coefficients per keccak (320 calls vs 4096)
 /// Note: We use [u128; 2] to represent each uint256 (low, high)
-pub fn seh_hash_lwe(
+pub fn wire_binding_hash(
     input_bits: u64,
     gate_idx: u32,
     num_wires: u8,
     circuit_seed: [u8; 32],
-) -> SehOutput {
-    let mut output = SehOutput::default();
+) -> BindingOutput {
+    let mut output = BindingOutput::default();
 
-    for row in 0..SEH_ROWS {
+    for row in 0..BINDING_ROWS {
         // rowSeed = keccak256(seed, gateIdx, row)
         // Solidity packs: seed (32 bytes) + gateIdx (32 bytes) + row (32 bytes)
         let mut hasher = Keccak256::new();
@@ -109,11 +109,11 @@ pub fn seh_hash_lwe(
 
 /// Represents 4 x uint256 (each as low/high u128 pair)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct SehOutput {
+pub struct BindingOutput {
     pub words: [(u128, u128); 4],
 }
 
-impl SehOutput {
+impl BindingOutput {
     pub fn is_nonzero(&self) -> bool {
         self.words.iter().any(|(lo, hi)| *lo != 0 || *hi != 0)
     }
@@ -129,30 +129,30 @@ impl SehOutput {
 
 
 
-/// Initialize SEH accumulator with initial wire state
-/// Mirrors: sehAcc = _sehHash(wires, 0)
-pub fn seh_init_lwe(
+/// Initialize wire binding accumulator with initial wire state
+/// Mirrors: bindingAcc = _wireBindingHash(wires, 0)
+pub fn wire_binding_init(
     wires: u64,
     num_wires: u8,
     circuit_seed: [u8; 32],
-) -> SehOutput {
-    seh_hash_lwe(wires, 0, num_wires, circuit_seed)
+) -> BindingOutput {
+    wire_binding_hash(wires, 0, num_wires, circuit_seed)
 }
 
-/// Update SEH accumulator after a batch of gates
-/// Mirrors Solidity: combined = sehAcc[0] ^ sehAcc[1] ^ sehAcc[2] ^ sehAcc[3] ^ wires
-///                   sehAcc = _sehHash(combined, batchEnd)
-pub fn seh_update_lwe(
-    acc: SehOutput,
+/// Update wire binding accumulator after a batch of gates
+/// Mirrors Solidity: combined = bindingAcc[0] ^ bindingAcc[1] ^ bindingAcc[2] ^ bindingAcc[3] ^ wires
+///                   bindingAcc = _wireBindingHash(combined, batchEnd)
+pub fn wire_binding_update(
+    acc: BindingOutput,
     batch_end: u32,
     wires: u64,
     num_wires: u8,
     circuit_seed: [u8; 32],
-) -> SehOutput {
+) -> BindingOutput {
     // XOR all uint256 words together, then XOR with wires
     let combined = acc.xor_all() ^ (wires as u128);
     // Use only the low 64 bits for the next hash input
-    seh_hash_lwe(combined as u64, batch_end, num_wires, circuit_seed)
+    wire_binding_hash(combined as u64, batch_end, num_wires, circuit_seed)
 }
 
 #[cfg(test)]
@@ -160,39 +160,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_seh_init_deterministic() {
+    fn test_wire_binding_init_deterministic() {
         let seed = [0x42u8; 32];
         let wires = 0x123456789ABCDEFu64;
-        let h1 = seh_init_lwe(wires, 64, seed);
-        let h2 = seh_init_lwe(wires, 64, seed);
+        let h1 = wire_binding_init(wires, 64, seed);
+        let h2 = wire_binding_init(wires, 64, seed);
         assert_eq!(h1, h2);
     }
 
     #[test]
-    fn test_seh_update_deterministic() {
+    fn test_wire_binding_update_deterministic() {
         let seed = [0x55u8; 32];
-        let acc = seh_init_lwe(0x1234567890ABCDEFu64, 64, seed);
+        let acc = wire_binding_init(0x1234567890ABCDEFu64, 64, seed);
         let wires = 0xDEADBEEFCAFEBABEu64;
-        let h1 = seh_update_lwe(acc, 64, wires, 64, seed);
-        let h2 = seh_update_lwe(acc, 64, wires, 64, seed);
+        let h1 = wire_binding_update(acc, 64, wires, 64, seed);
+        let h2 = wire_binding_update(acc, 64, wires, 64, seed);
         assert_eq!(h1, h2);
     }
 
     #[test]
-    fn test_seh_chain() {
+    fn test_wire_binding_chain() {
         let seed = [0x01u8; 32];
         let initial_wires = 0xFFFFu64;
-        let acc = seh_init_lwe(initial_wires, 64, seed);
-        let acc = seh_update_lwe(acc, 64, 0x1234, 64, seed);
-        let acc = seh_update_lwe(acc, 128, 0x5678, 64, seed);
+        let acc = wire_binding_init(initial_wires, 64, seed);
+        let acc = wire_binding_update(acc, 64, 0x1234, 64, seed);
+        let acc = wire_binding_update(acc, 128, 0x5678, 64, seed);
         assert!(acc.is_nonzero());
     }
 
     #[test]
-    fn test_seh_hash_output_is_1024_bits() {
+    fn test_wire_binding_hash_output_is_1024_bits() {
         let seed = [0xABu8; 32];
         let wires = 0xFFFFFFFFFFFFFFFFu64;
-        let h = seh_hash_lwe(wires, 0, 64, seed);
+        let h = wire_binding_hash(wires, 0, 64, seed);
         // Result should have content across the 4 uint256 words (64 x 16-bit values)
         assert!(h.is_nonzero());
     }
