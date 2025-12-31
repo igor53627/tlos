@@ -2,9 +2,12 @@
 
 ## Project Overview
 
-TLOS = TLO + SEH (Subspace-Evasive Hashing from Ma-Dai-Shi 2025)
+TLOS = Topology-Lattice Obfuscation for Smart contracts
 
-Adds inter-gate wire binding to TLO for mix-and-match attack prevention.
+Three-layer security model:
+1. **Topology layer** - structural mixing (heuristic)
+2. **LWE layer** - control function hiding (computational)
+3. **Wire binding layer** - full-rank linear hash for inter-gate consistency (algebraic binding, inspired by [MDS25])
 
 ## Key Commands
 
@@ -41,7 +44,7 @@ cd paper && pdflatex tlos.tex && pdflatex tlos-paper.tex
 | Gas | ~8.5M (28% of block) |
 | Storage | 662 KB |
 | Batch size | 128 gates |
-| SEH updates | 5 for 640 gates |
+| Binding updates | 5 for 640 gates |
 
 ## Paper Formatting (CRITICAL)
 
@@ -127,9 +130,9 @@ If citations show as "[?]" in PDF:
 2. Run bibtex then pdflatex twice
 3. Add missing entries to refs.bib
 
-## SEH Technical Notes
+## Wire Binding Technical Notes
 
-- SEH provides **integrity/binding**, NOT collision resistance
+- Wire binding provides **integrity/binding**, NOT collision resistance
 - Full-rank 64x64 matrix over Z_q is bijective (unique preimage)
 - Do NOT claim "collision resistance" - the linear system is trivial to solve
 

@@ -39,7 +39,7 @@
   upquote=true,
 }
 
-\title{\tlos{}: Topology-Lattice Obfuscation with SEH\\for Smart Contracts}
+\title{\tlos{}: Topology-Lattice Obfuscation for Smart Contracts}
 \author{}
 \date{}
 
@@ -47,9 +47,9 @@
 \maketitle
 
 \begin{abstract}
-We present \tlos{} (Topology-Lattice Obfuscation with SEH), a practical circuit obfuscation framework for EVM that adds inter-gate wire consistency via a full-rank linear hash we call SEH (inspired by subspace-evasive hashing~\cite{MDS25}). \tlos{} uses a three-layer security model: a topology layer that defeats structural and statistical attacks, a lattice layer using on-chain \lwe{} inner products that defeats semantic attacks, and an SEH layer that binds wire values across gates to prevent mix-and-match attacks.
+We present \tlos{} (Topology-Lattice Obfuscation for Smart contracts), a practical circuit obfuscation framework for EVM that adds inter-gate wire consistency via a full-rank linear hash (inspired by~\cite{MDS25}). \tlos{} uses a three-layer security model: a topology layer that defeats structural and statistical attacks, a lattice layer using on-chain \lwe{} inner products that defeats semantic attacks, and a wire binding layer that binds wire values across gates to prevent mix-and-match attacks.
 
-\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank 64$\times$64 SEH. Control functions are hidden via \lwe{} ciphertexts; SEH ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank $64{\times}64$ wire binding. Control functions are hidden via \lwe{} ciphertexts; wire binding ensures that gate evaluations cannot be mixed-and-matched across different execution paths. Target applications include predicates with \emph{eventually-expiring} secrets (honeypots, sealed-bid auctions, lotteries, MEV protection). Deployment requires only a standard smart contract with timestamp-based expiry.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -82,10 +82,10 @@ We take a practical approach: \emph{resist known attack classes} through three c
   
   \item \textbf{Layer 2 (\lwe{}):} On-chain inner product computation defeats semantic attacks (RainbowTable). Control functions hidden via \lwe{} ciphertexts. \emph{Security: computational, based on \lwe{} hardness (see Table~\ref{tab:lwe-security} for actual estimates).}
   
-  \item \textbf{Layer 3 (SEH):} Full-rank linear hash binds wire values across gate evaluations, preventing mix-and-match attacks. \emph{Security: algebraic binding via bijective map over $\mathbb{Z}_q^{64}$ (not cryptographic hiding).}
+  \item \textbf{Layer 3 (Wire Binding):} Full-rank linear hash binds wire values across gate evaluations, preventing mix-and-match attacks (see \S\ref{sec:wire-binding}). \emph{Security: algebraic binding via bijective map over $\mathbb{Z}_q^{64}$ (not cryptographic hiding).}
 \end{enumerate}
 
-\textbf{Key mechanism:} Wrong-key decryption yields garbage; SEH ensures consistent execution traces.
+\textbf{Key mechanism:} Wrong-key decryption yields garbage; wire binding ensures consistent execution traces.
 }}
 \end{center}
 
@@ -113,7 +113,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \subsection{Contributions}
 
 \begin{enumerate}
-  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain \lwe{} inner products, and a full-rank linear SEH layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ SEH matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 9/9 resistance in our attack evaluation matrix.
+  \item \textbf{\tlos{} Framework:} A three-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain \lwe{} inner products, and a full-rank wire binding layer. Our implementation uses $n{=}128$ LWE dimension and a $64{\times}64$ binding matrix, achieving ${\sim}8.5$M gas (28\% of block) and 662\,KB storage for 640 gates with 9/9 resistance in our attack evaluation matrix.
   
   \item \textbf{Structural Mixing:} Wire selection algorithm defeating structural and statistical attacks through non-pow2 distances, uniform wire usage, and irregular layers. Security is heuristic and empirically validated.
   
@@ -306,7 +306,7 @@ The self-inverse property enables commit-reveal protocols where the solver demon
   
   \item \textbf{\lwe{} Layer:} On-chain inner product computation hides control functions, defeating semantic attacks by preventing subcircuit evaluation.
   
-  \item \textbf{SEH Layer:} Full-rank $64{\times}64$ linear hash binds wire values across gates, preventing mix-and-match attacks. Updated every 128 gates for gas efficiency.
+  \item \textbf{Wire Binding Layer:} Full-rank $64{\times}64$ linear hash binds wire values across gates, preventing mix-and-match attacks. Updated every 128 gates for gas efficiency.
 \end{enumerate}
 
 \textbf{Deployment:} A single smart contract with:
@@ -544,7 +544,7 @@ Each gate's control function $c_f: \{0,1\}^2 \to \{0,1\}$ (one of 16 possible) i
   
   \item \textbf{\lwe{} layer (computational):} Defeats semantic attacks by hiding control functions via \lwe{} ciphertexts with on-chain inner products. Security is \emph{computational}, based on \lwe{} hardness (see Table~\ref{tab:lwe-security}).
   
-  \item \textbf{SEH layer (algebraic):} Binds wire values across gates via full-rank linear hash, preventing mix-and-match attacks. Security is \emph{algebraic binding}, not cryptographic hiding.
+  \item \textbf{Wire binding layer (algebraic):} Binds wire values across gates via full-rank linear hash, preventing mix-and-match attacks. Security is \emph{algebraic binding}, not cryptographic hiding.
 \end{enumerate}
 
 \textbf{Wrong-key garbage property:} Attackers can simulate offline but wrong keys yield garbage. The on-chain contract exposes only 1-bit output, limiting information per query.
@@ -824,7 +824,7 @@ We evaluated attack resistance with different layer combinations to understand e
 Baseline (no obfuscation) & 0/3 & 0/2 & 0/1 & 0/1 \\
 Topology only & 3/3 & 2/2 & 0/1 & 0/1 \\
 Topology + \lwe{} & 3/3 & 2/2 & 1/1 & 0/1 \\
-Topology + \lwe{} + SEH (\tlos{}) & 3/3 & 2/2 & 1/1 & 1/1 \\
+Topology + \lwe{} + Wire Binding (\tlos{}) & 3/3 & 2/2 & 1/1 & 1/1 \\
 \bottomrule
 \end{tabular}
 \caption{Layer ablation: attacks defeated per category. Numbers in parentheses indicate total attacks in category.}
@@ -835,7 +835,7 @@ Topology + \lwe{} + SEH (\tlos{}) & 3/3 & 2/2 & 1/1 & 1/1 \\
 \begin{itemize}
   \item \textbf{Topology alone} defeats structural attacks (compression, pattern matching, butterfly detection) and statistical attacks (chi-squared, diagonal correlation), but \emph{not} semantic attacks.
   \item \textbf{\lwe{} layer} is necessary to defeat semantic attacks (RainbowTable). Without LWE-hidden control functions, an attacker can evaluate subcircuits and match against known truth tables.
-  \item \textbf{SEH layer} is necessary to prevent mix-and-match attacks. Without SEH, an attacker can evaluate gates with inconsistent wire values from different execution paths.
+  \item \textbf{Wire binding layer} is necessary to prevent mix-and-match attacks. Without wire binding, an attacker can evaluate gates with inconsistent wire values from different execution paths.
 \end{itemize}
 
 %------------------------------------------------------------------------------
@@ -915,15 +915,15 @@ To prevent front-running:
 Sender binding prevents reward theft: an attacker copying the reveal transaction computes $\mathsf{hash}(\mathsf{attacker} \| \mathsf{secret}) \neq H$.
 
 %------------------------------------------------------------------------------
-\section{SEH: Inter-Gate Wire Binding}
-\label{sec:seh}
+\section{Wire Binding: Inter-Gate Consistency}
+\label{sec:wire-binding}
 %------------------------------------------------------------------------------
 
-\tlos{} includes a full-rank linear hash we call SEH (inspired by~\cite{MDS25}, but \emph{not} subspace-evasive in the formal sense). SEH binds wire values across gate evaluations, preventing mix-and-match attacks.
+\tlos{} includes a full-rank linear hash (inspired by~\cite{MDS25}, but \emph{not} subspace-evasive in the formal sense) that binds wire values across gate evaluations, preventing mix-and-match attacks.
 
 \subsection{The Mix-and-Match Attack}
 
-Without SEH, gates are evaluated independently. An attacker could potentially:
+Without wire binding, gates are evaluated independently. An attacker could potentially:
 \begin{enumerate}
   \item Evaluate gate $i$ with crafted inputs $(w_1, w_2)$
   \item Evaluate gate $j$ with \emph{different} crafted inputs $(w'_1, w'_2)$
@@ -932,9 +932,9 @@ Without SEH, gates are evaluated independently. An attacker could potentially:
 
 This is a \emph{mix-and-match attack}: using inconsistent intermediate values to probe the circuit.
 
-\subsection{SEH Construction}
+\subsection{Wire Binding Construction}
 
-SEH uses a full-rank linear map over $\mathbb{Z}_q$: $H(x) = Ax \mod q$ where $A \in \mathbb{Z}_q^{64 \times 64}$ is derived from the circuit seed and batch index. Each 128-gate batch updates the accumulator:
+The wire binding layer uses a full-rank linear map over $\mathbb{Z}_q$: $H(x) = Ax \mod q$ where $A \in \mathbb{Z}_q^{64 \times 64}$ is derived from the circuit seed and batch index. Each 128-gate batch updates the accumulator:
 \[
 \mathsf{acc}_{k+1} = H(\mathsf{acc}_k \oplus \mathsf{wires}, \mathsf{batchEnd}_k)
 \]
@@ -945,14 +945,14 @@ SEH uses a full-rank linear map over $\mathbb{Z}_q$: $H(x) = Ax \mod q$ where $A
 
 \subsection{Security Properties}
 
-\textbf{What SEH provides:}
+\textbf{What wire binding provides:}
 \begin{itemize}
   \item Mix-and-match prevention: Gates cannot be evaluated with inconsistent inputs
   \item Execution trace binding: Full evaluation history is committed to a 1024-bit accumulator
   \item Algebraic binding: For full-rank $A$, each accumulator has unique preimage
 \end{itemize}
 
-\textbf{What SEH does NOT provide:}
+\textbf{What wire binding does NOT provide:}
 \begin{itemize}
   \item Cryptographic hiding: The linear map is public and invertible
   \item Collision resistance: Trivial to find $x$ given $Ax = y$
@@ -964,11 +964,11 @@ SEH uses a full-rank linear map over $\mathbb{Z}_q$: $H(x) = Ax \mod q$ where $A
 The full \tlos{} system has three security components:
 \begin{itemize}
   \item \textbf{LWE} for control function hiding (${\sim}98$-bit post-quantum for $n{=}128$)
-  \item \textbf{SEH} for wire consistency (algebraic binding)
+  \item \textbf{Wire binding} for wire consistency (algebraic binding)
   \item \textbf{Hash preimage} for unlocking (${\sim}256$-bit)
 \end{itemize}
 
-The weakest link determines overall security. LWE provides computational hardness; SEH provides integrity/binding.
+The weakest link determines overall security. LWE provides computational hardness; wire binding provides integrity/binding.
 
 %------------------------------------------------------------------------------
 \section{Comparison with Hash-Compare Baseline}
@@ -1125,16 +1125,16 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
 \begin{itemize}
   \item \textbf{Topology layer (heuristic):} Defeats structural and statistical attacks through wire selection patterns. Empirically validated.
   \item \textbf{\lwe{} layer (computational):} On-chain inner product computation hides control functions, defeating semantic attacks. ${\sim}98$-bit post-quantum security with $n{=}128$ using uniform secrets.
-  \item \textbf{SEH layer (wire binding):} Full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, preventing mix-and-match attacks. Security: algebraic binding.
+  \item \textbf{Wire binding layer:} Full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, preventing mix-and-match attacks. Security: algebraic binding.
 \end{itemize}
 
-\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on \lwe{} hardness; SEH provides algebraic wire binding. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
+\tlos{} achieves 9/9 resistance against our attack evaluation matrix at ${\sim}8.5$M gas with $n{=}128$ and 64 wires/640 gates. Security is based on \lwe{} hardness; the wire binding layer provides algebraic consistency. The system targets \emph{eventually-expiring secrets} where post-quantum security is desired.
 
 \textbf{Key contributions:}
 \begin{itemize}
   \item On-chain \lwe{} inner products for true control function hiding
   \item Wrong-key garbage property: attackers can simulate offline but learn nothing without the correct secret
-  \item SEH wire binding: inter-gate consistency prevents mix-and-match attacks
+  \item Wire binding: inter-gate consistency prevents mix-and-match attacks
   \item Practical gas costs within EVM block limits
   \item Honest comparison with hash-compare baseline (Section~\ref{sec:hash-compare})
 \end{itemize}
@@ -1143,7 +1143,7 @@ We do not claim \tlos{} is always better than hash-compare. The choice depends o
 
 \textbf{Future Work:}
 \begin{itemize}
-  \item Per-gate SEH updates for stronger binding
+  \item Per-gate wire binding updates for stronger consistency
   \item Formal analysis of topology layer security
   \item Higher security parameters ($n \geq 256$) for NIST-level PQ security
 \end{itemize}

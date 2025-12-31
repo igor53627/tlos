@@ -30,7 +30,7 @@
   upquote=true,
 }
 
-\title{\tlos{}: Topology-Lattice Obfuscation with SEH\\for Smart Contracts}
+\title{\tlos{}: Topology-Lattice Obfuscation for Smart Contracts}
 \author{
 \textit{Anonymous Submission}
 }
@@ -42,9 +42,9 @@
 \begin{abstract}
 We present \tlos{}, a practical circuit obfuscation framework for EVM smart contracts that resists specific attack classes (structural, semantic, mix-and-match) with practical gas costs.
 
-\tlos{} uses a three-layer security model: (1)~topology mixing complicates structural attacks via non-power-of-2 wire distances and uniform wire usage, (2)~Learning With Errors (\lwe{}) inner products computed on-chain hide gate control functions, and (3)~a full-rank linear hash (SEH, inspired by subspace-evasive hashing~\cite{MDS25}) binds wire values across gates, ensuring that an adversary cannot mix outputs from different execution paths.
+\tlos{} uses a three-layer security model: (1)~topology mixing complicates structural attacks via non-power-of-2 wire distances and uniform wire usage, (2)~Learning With Errors (\lwe{}) inner products computed on-chain hide gate control functions, and (3)~a full-rank linear hash (inspired by~\cite{MDS25}) binds wire values across gates, ensuring that an adversary cannot mix outputs from different execution paths.
 
-\tlos{} achieves ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank 64$\times$64 SEH. Security estimates (${\sim}2^{98}$ PQ) are based on heuristic modeling of our LWE-like construction; see \S\ref{sec:lwe-params} for full parameterization. Target applications include predicates with eventually-expiring secrets, particularly \emph{low-entropy secrets} (passwords, phrases, small ranges) where \tlos{} provides significant advantage over simple hash commitments by making each guess computationally expensive.
+\tlos{} achieves ${\sim}8.5$M gas with $n{=}128$ \lwe{} dimension and full-rank $64{\times}64$ wire binding. Security estimates (${\sim}2^{98}$ PQ) are based on heuristic modeling of our LWE-like construction; see \S\ref{sec:lwe-params} for full parameterization. Target applications include predicates with eventually-expiring secrets, particularly \emph{low-entropy secrets} (passwords, phrases, small ranges) where \tlos{} provides significant advantage over simple hash commitments by making each guess computationally expensive.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -61,7 +61,7 @@ Indistinguishability obfuscation (iO) from lattices~\cite{MDS25} achieves strong
 \begin{enumerate}
 \item \textbf{Topology:} Structural mixing complicates structural/statistical attacks. \emph{Security: heuristic.}
 \item \textbf{\lwe{}:} On-chain inner products hide control functions. \emph{Security: estimated ${\sim}2^{98}$ PQ with $n{=}128$.}
-\item \textbf{SEH:} Full-rank linear hash binds wire values across gates, preventing mix-and-match. \emph{Security: algebraic binding (bijective map).}
+\item \textbf{Wire Binding:} Full-rank linear hash binds wire values across gates, preventing mix-and-match. \emph{Security: algebraic binding (bijective map).}
 \end{enumerate}
 }}
 \end{center}
@@ -70,9 +70,9 @@ Indistinguishability obfuscation (iO) from lattices~\cite{MDS25} achieves strong
 
 \begin{enumerate}
 \item \textbf{\tlos{} Framework:} Three-layer obfuscation for EVM using lattice assumptions (${\sim}8.5$M gas with $n{=}128$).
-\item \textbf{Full-Rank Linear Hash:} Inter-gate wire binding via on-chain $64{\times}64$ matrix-vector products. Inspired by~\cite{MDS25} but simplified: a public bijective map providing algebraic binding, not cryptographic hiding.
+\item \textbf{Full-Rank Wire Binding:} Inter-gate wire binding via on-chain $64{\times}64$ matrix-vector products. Inspired by~\cite{MDS25} but simplified: a public bijective map providing algebraic binding, not cryptographic hiding.
 \item \textbf{Per-Batch Updates:} Gas-efficient binding (128-gate batches, 5 updates for 640 gates).
-\item \textbf{SEH PRG Optimization:} Derive 16 matrix coefficients per keccak call (320 calls vs 4096).
+\item \textbf{PRG Optimization:} Derive 16 matrix coefficients per keccak call (320 calls vs 4096).
 \item \textbf{Use Case Analysis:} When circuit obfuscation provides advantage over simple hash commitments.
 \end{enumerate}
 
@@ -149,19 +149,19 @@ Under these constraints, \tlos{} provides the \emph{only} way to make low-entrop
 \section{Construction}
 %------------------------------------------------------------------------------
 
-\subsection{Full-Rank Linear SEH}
+\subsection{Full-Rank Wire Binding}
 
 We bind wire values across gates using a \emph{full-rank} linear hash: $H(x) = Ax \mod q$ where $A \in \mathbb{Z}_q^{64 \times 64}$ is derived from \texttt{circuitSeed} and gate index. This is inspired by~\cite{MDS25} but is \emph{not} subspace-evasive in the formal sense---it is simply a public bijective linear map providing algebraic binding.
 
 \textbf{Why 64$\times$64?} A full-rank $64 \times 64$ matrix over $\mathbb{Z}_q$ has trivial kernel (only the zero vector), so $H$ is a bijection on $\mathbb{Z}_q^{64}$: every accumulator state has a unique preimage. Smaller matrices (e.g., $8 \times 64$) have large nullspaces where many inputs collide, undermining binding.
 
-\textbf{Threat model (mix-and-match):} Without SEH, an adversary could evaluate different branches of the circuit and splice together wire values from distinct execution paths to synthesize a ``fake'' trace. The full-rank SEH forces all wires in a batch to be combined into a 1024-bit accumulator; any deviation changes the accumulator in a way that cannot be repaired without recomputing a full, consistent trace.
+\textbf{Threat model (mix-and-match):} Without wire binding, an adversary could evaluate different branches of the circuit and splice together wire values from distinct execution paths to synthesize a ``fake'' trace. The full-rank hash forces all wires in a batch to be combined into a 1024-bit accumulator; any deviation changes the accumulator in a way that cannot be repaired without recomputing a full, consistent trace.
 
 \textbf{Note:} This is a public random linear map over $\mathbb{Z}_q$ (no noise, no secret). Security is \emph{integrity/binding}, not cryptographic collision resistance: once an accumulator value is fixed, there is (for full-rank $A$) a single consistent wire vector that can produce it.
 
 \begin{lstlisting}
 // Optimized: 16 coefficients per keccak (320 calls vs 4096)
-function _sehHash(uint256 input, uint256 gateIdx) 
+function _wireBindingHash(uint256 input, uint256 gateIdx) 
     internal view returns (uint256[4] memory output) {
   assembly {
     for { let row := 0 } lt(row, 64) { row := add(row, 1) } {
@@ -188,7 +188,7 @@ For gas efficiency, the consistency hash is updated every 128 gates:
 \mathsf{hashAcc}_{k+1} = H(\mathsf{hashAcc}_k \oplus \mathsf{wires}, \mathsf{batchEnd}_k)
 \]
 
-This provides 5 hash updates for 640 gates. Combined with the PRG optimization (16 coefficients per keccak instead of 1), total SEH overhead is reduced by ${\sim}25\times$ compared to naive implementation.
+This provides 5 hash updates for 640 gates. Combined with the PRG optimization (16 coefficients per keccak instead of 1), total wire binding overhead is reduced by ${\sim}25\times$ compared to naive implementation.
 
 \subsection{LWE-Like Parameterization}
 \label{sec:lwe-params}
@@ -270,11 +270,11 @@ $n$ & Rate (ops/s) & Full $2^n$ time & Extrapolated $n{=}128$ \\
 \textbf{Component} & \textbf{Basis} & \textbf{Est.\ Security} \\
 \midrule
 CF hiding & \lwe{}-like ($n{=}128$, $q{=}65521$, $m{=}2560$) & ${\sim}2^{98}$ PQ (heuristic) \\
-SEH binding & Full-rank 64$\times$64 linear map & Algebraic binding \\
+Wire binding & Full-rank 64$\times$64 linear map & Algebraic binding \\
 Topology & Heuristic & Empirical (\S\ref{sec:topology-exp}) \\
 \bottomrule
 \end{tabular}
-\caption{Security profile. LWE estimate is heuristic (see \S\ref{sec:lwe-params}). SEH provides binding via trivial kernel.}
+\caption{Security profile. LWE estimate is heuristic (see \S\ref{sec:lwe-params}). Wire binding provides algebraic binding via trivial kernel.}
 \label{tab:security}
 \end{table}
 
@@ -287,7 +287,7 @@ We estimate ${\sim}2^{98}$ post-quantum cost against the underlying \lwe{} insta
 
 For higher security (${\sim}2^{128}$ PQ), $n \geq 256$ would be needed (requires a high-throughput L2 or dedicated precompiles).
 
-\subsection{What SEH Provides}
+\subsection{What Wire Binding Provides}
 
 \begin{itemize}
 \item \textbf{Mix-and-match detection:} Any attempt to evaluate gates with inconsistent inputs will, except with negligible probability, yield a final accumulator that does not match the expected value.
@@ -313,14 +313,14 @@ For higher security (${\sim}2^{128}$ PQ), $n \geq 256$ would be needed (requires
 
 \textbf{Gas costs (measured):}
 \begin{itemize}
-\item \textbf{TLOS-LWE ($n{=}128$, full-rank SEH)}: ${\sim}8.5$M gas (28\% of block)
+\item \textbf{TLOS-LWE ($n{=}128$, full-rank wire binding)}: ${\sim}8.5$M gas (28\% of block)
 \end{itemize}
 
 \textbf{Optimizations applied:}
 \begin{itemize}
-\item SEH PRG: 16 coefficients per keccak (320 calls vs 4096 per update)
+\item PRG optimization: 16 coefficients per keccak (320 calls vs 4096 per update)
 \item Single \texttt{mod} at end of inner product (vs per-term)
-\item Batch size 128 (5 SEH updates for 640 gates)
+\item Batch size 128 (5 binding updates for 640 gates)
 \item $n{=}128$ LWE dimension for ${\sim}2^{98}$ PQ security
 \end{itemize}
 
@@ -367,22 +367,22 @@ We evaluated attack resistance with different layer combinations:
 Baseline (no obfuscation) & 0/3 & 0/1 & 0/1 \\
 Topology only & 3/3 & 0/1 & 0/1 \\
 Topology + \lwe{} & 3/3 & 1/1 & 0/1 \\
-Topology + \lwe{} + SEH & 3/3 & 1/1 & 1/1 \\
+Topology + \lwe{} + Wire Binding & 3/3 & 1/1 & 1/1 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Key findings:} (1)~Topology alone defeats structural attacks but not semantic (RainbowTable) attacks. (2)~\lwe{} is necessary to hide control functions from semantic analysis. (3)~SEH is necessary to prevent mix-and-match---without it, an attacker can evaluate gates with inconsistent wire values.
+\textbf{Key findings:} (1)~Topology alone defeats structural attacks but not semantic (RainbowTable) attacks. (2)~\lwe{} is necessary to hide control functions from semantic analysis. (3)~Wire binding is necessary to prevent mix-and-match---without it, an attacker can evaluate gates with inconsistent wire values.
 
 %------------------------------------------------------------------------------
 \section{Conclusion}
 %------------------------------------------------------------------------------
 
-\tlos{} is a practical circuit obfuscation framework for EVM using lattice assumptions, achieving estimated ${\sim}2^{98}$ post-quantum security (heuristic, see \S\ref{sec:lwe-params}) at ${\sim}8.5$M gas with $n{=}128$ and full-rank SEH. The three-layer design (topology + \lwe{} control function hiding + full-rank linear SEH) provides resistance against structural, statistical, semantic, and mix-and-match attacks.
+\tlos{} is a practical circuit obfuscation framework for EVM using lattice assumptions, achieving estimated ${\sim}2^{98}$ post-quantum security (heuristic, see \S\ref{sec:lwe-params}) at ${\sim}8.5$M gas with $n{=}128$ and full-rank wire binding. The three-layer design (topology + \lwe{} control function hiding + full-rank wire binding) provides resistance against structural, statistical, semantic, and mix-and-match attacks.
 
 Key insight: \tlos{} provides significant advantage over simple hash commitments for \emph{low-entropy secrets} by making each guess computationally expensive. Its value is in making low-entropy guesses expensive under EVM constraints and enabling richer obfuscated logic.
 
-Future work includes higher security parameters ($n \geq 256$), succinct verification via zkSNARK/STARK, and formal security analysis of batch SEH.
+Future work includes higher security parameters ($n \geq 256$), succinct verification via zkSNARK/STARK, and formal security analysis of batch wire binding.
 
 \begin{thebibliography}{9}
 \bibitem{MDS25} Ma, Dai, Shi. ``Indistinguishability Obfuscation from Lattices in the Quantum Random Oracle Model.'' ePrint 2025/307.
