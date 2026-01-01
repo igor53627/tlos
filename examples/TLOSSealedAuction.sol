@@ -96,6 +96,8 @@ contract TLOSSealedAuction {
     // STATE - Mutable
     // =========================================================================
     
+    uint256 private _reentrancyGuard = 1;
+    
     string public itemDescription;
     address public highestBidder;
     uint256 public highestBid;
@@ -125,6 +127,13 @@ contract TLOSSealedAuction {
     modifier inPhase(AuctionPhase expected) {
         require(getPhase() == expected, "Wrong auction phase");
         _;
+    }
+    
+    modifier nonReentrant() {
+        require(_reentrancyGuard == 1, "Reentrancy");
+        _reentrancyGuard = 2;
+        _;
+        _reentrancyGuard = 1;
     }
 
     // =========================================================================
@@ -263,7 +272,7 @@ contract TLOSSealedAuction {
     /// @notice Claim refund of deposit (minus bid amount if winner)
     /// @dev Non-winners get full deposit back. Winner gets deposit - bidAmount back.
     ///      Unrevealed bids forfeit their deposits as penalty.
-    function claimRefund() external {
+    function claimRefund() external nonReentrant {
         require(getPhase() == AuctionPhase.FINALIZED, "Auction not finalized");
         
         Bid storage bid = _bids[msg.sender];

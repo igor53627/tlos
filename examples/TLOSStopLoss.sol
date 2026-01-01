@@ -148,11 +148,15 @@ contract TLOSStopLoss {
     // DEPOSIT / WITHDRAW
     // =========================================================================
     
-    function deposit() external payable {
-        require(msg.value > 0, "Zero deposit");
-        positions[msg.sender].collateral += msg.value;
-        totalDeposits += msg.value;
-        emit Deposit(msg.sender, msg.value);
+    function deposit() external payable nonReentrant {
+        _deposit(msg.sender, msg.value);
+    }
+    
+    function _deposit(address user, uint256 amount) internal {
+        require(amount > 0, "Zero deposit");
+        positions[user].collateral += amount;
+        totalDeposits += amount;
+        emit Deposit(user, amount);
     }
     
     function withdraw(uint256 amount) external nonReentrant {
@@ -300,8 +304,6 @@ contract TLOSStopLoss {
     // =========================================================================
     
     receive() external payable {
-        positions[msg.sender].collateral += msg.value;
-        totalDeposits += msg.value;
-        emit Deposit(msg.sender, msg.value);
+        _deposit(msg.sender, msg.value);
     }
 }

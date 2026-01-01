@@ -108,6 +108,8 @@ contract TLOSDeadManSwitch {
     // STATE - Mutable
     // =========================================================================
     
+    uint256 private _reentrancyGuard = 1;
+    
     uint256 public lastPing;
     uint256 public totalClaimed;
     uint256 public balanceAtDeath;  // Snapshot of balance when first claim occurs
@@ -156,6 +158,13 @@ contract TLOSDeadManSwitch {
     modifier onlyDead() {
         require(block.timestamp >= lastPing + heartbeatInterval, "Owner still active");
         _;
+    }
+    
+    modifier nonReentrant() {
+        require(_reentrancyGuard == 1, "Reentrancy");
+        _reentrancyGuard = 2;
+        _;
+        _reentrancyGuard = 1;
     }
 
     // =========================================================================
@@ -282,7 +291,7 @@ contract TLOSDeadManSwitch {
         uint256 heirIndex,
         bytes32 code,
         int8[48] calldata puzzleSolution
-    ) external onlyDead {
+    ) external onlyDead nonReentrant {
         require(heirIndex < heirCount, "Invalid heir index");
         
         HeirRecord storage heir = _heirs[heirIndex];

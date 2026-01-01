@@ -223,12 +223,13 @@ contract TLOSTreasureHuntTest is Test {
     }
 
     function testTimeRemaining() public {
+        uint256 startTime = block.timestamp;
         assertEq(hunt.timeRemaining(), EXPIRY_DURATION);
         
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(startTime + 1 days);
         assertEq(hunt.timeRemaining(), EXPIRY_DURATION - 1 days);
         
-        vm.warp(block.timestamp + EXPIRY_DURATION);
+        vm.warp(startTime + EXPIRY_DURATION);
         assertEq(hunt.timeRemaining(), 0);
     }
 
