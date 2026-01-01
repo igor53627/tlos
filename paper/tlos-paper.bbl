@@ -1,0 +1,102 @@
+\begin{thebibliography}{10}
+
+\bibitem{APS15}
+M.~R. Albrecht, R.~Player, and S.~Scott.
+\newblock On the concrete hardness of learning with errors.
+\newblock {\em J. Math. Cryptol.}, 9(3):169--203, 2015.
+
+\bibitem{BGI12}
+B.~Barak, S.~Garg, Y.~Ishai, O.~Paneth, and A.~Sahai.
+\newblock On the (im)possibility of obfuscating programs.
+\newblock In {\em J. ACM}, 2012.
+
+\bibitem{CCMR24}
+R.~Canetti et~al.
+\newblock Local mixing for circuit obfuscation, 2024.
+
+\bibitem{CLW25}
+Y.~Chen, H.~Lin, and B.~Waters.
+\newblock Indistinguishability obfuscation from lwe.
+\newblock Cryptology ePrint Archive, 2025.
+
+\bibitem{GGH13}
+S.~Garg, C.~Gentry, S.~Halevi, M.~Raykova, A.~Sahai, and B.~Waters.
+\newblock Candidate indistinguishability obfuscation and functional encryption
+  for all circuits.
+\newblock In {\em FOCS}, 2013.
+
+\bibitem{GP21}
+R.~Gay and R.~Pass.
+\newblock Indistinguishability obfuscation from circular security.
+\newblock In {\em STOC}, 2021.
+
+\bibitem{GKW17}
+R.~Goyal, V.~Koppula, and B.~Waters.
+\newblock Lockable obfuscation.
+\newblock In {\em FOCS}, 2017.
+
+\bibitem{GPUHybrid25}
+Q.~Guo et~al.
+\newblock Accelerating the primal hybrid attack against sparse {LWE} using
+  {GPU}s.
+\newblock Cryptology ePrint Archive, Report 2025/1990, 2025.
+
+\bibitem{JLS21}
+A.~Jain, H.~Lin, and A.~Sahai.
+\newblock Indistinguishability obfuscation from well-founded assumptions.
+\newblock In {\em STOC}, 2021.
+
+\bibitem{MDS25}
+Y.~Ma, W.~Dai, and E.~Shi.
+\newblock Quasi-linear indistinguishability obfuscation via mathematical proofs
+  of equivalence and applications.
+\newblock Cryptology ePrint Archive, Report 2025/307, 2025.
+\newblock \url{https://eprint.iacr.org/2025/307}.
+
+\bibitem{MM09}
+D.~Micciancio and P.~Mol.
+\newblock Pseudorandom knapsacks and the sample complexity of {LWE}
+  search-to-decision reductions.
+\newblock In {\em CRYPTO}, pages 465--484, 2011.
+\newblock Binary-error LWE variant analysis.
+
+\bibitem{FIPS203}
+{NIST}.
+\newblock {FIPS} 203: Module-lattice-based key-encapsulation mechanism
+  standard, 2024.
+\newblock \url{https://csrc.nist.gov/pubs/fips/203/final}.
+
+\bibitem{Pei09}
+C.~Peikert.
+\newblock Public-key cryptosystems from the worst-case shortest vector problem.
+\newblock In {\em STOC}, 2009.
+
+\bibitem{Regev05}
+O.~Regev.
+\newblock On lattices, learning with errors, random linear codes, and
+  cryptography.
+\newblock {\em J. ACM}, 56(6), 2009.
+
+\bibitem{SBP25}
+Sora.
+\newblock Diamond io: Practical indistinguishability obfuscation.
+\newblock GitHub, 2025.
+
+\bibitem{fpylll}
+T.~F.~D. Team.
+\newblock fpylll, a python wrapper for the fplll lattice reduction library,
+  2023.
+\newblock \url{https://github.com/fplll/fpylll}.
+
+\bibitem{WZ17}
+D.~Wichs and G.~Zirdelis.
+\newblock Obfuscating compute-and-compare programs under lwe.
+\newblock In {\em FOCS}, 2017.
+
+\bibitem{GPUFalcon23}
+R.~K. Zhao, R.~Steinfeld, and A.~Sakzad.
+\newblock High throughput lattice-based signatures on {GPU}s.
+\newblock Cryptology ePrint Archive, Report 2023/399, 2023.
+\newblock \url{https://eprint.iacr.org/2023/399}.
+
+\end{thebibliography}

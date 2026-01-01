@@ -4,10 +4,11 @@
 
 TLOS = Topology-Lattice Obfuscation for Smart contracts
 
-Three-layer security model:
+Four-layer security model:
 1. **Topology layer** - structural mixing (heuristic)
-2. **LWE layer** - control function hiding (computational)
+2. **LWE layer** - control function hiding via standard LWE with Gaussian noise (σ=8, n=384, ~2^112 PQ)
 3. **Wire binding layer** - full-rank linear hash for inter-gate consistency (algebraic binding, inspired by [MDS25])
+4. **Planted LWE puzzle** - forces minimum 3^48 ≈ 2^76 brute-force search space (1.26M gas)
 
 ## Key Commands
 
@@ -28,8 +29,14 @@ cd paper && pdflatex tlos.tex && pdflatex tlos.tex && pdflatex tlos-paper.tex &&
 
 ## Repository Structure
 
-- `contracts/` - Solidity contracts (TLOSLWE.sol is the main PQ variant)
+- `contracts/` - Solidity contracts
+  - `TLOS.sol` - Main contract (Layers 1-3)
+  - `TLOSOptimized.sol` - Gas-optimized variant with configurable n
+  - `TLOSWithPuzzleV2.sol` - Full 4-layer with planted LWE puzzle (n=48)
+  - `WeakLWEPuzzleV7.sol` - Standalone puzzle (n=48, production)
 - `src/` - Rust implementation (ported from circuit-mixing-research)
+- `scripts/` - Benchmarks and attack scripts
+  - `lwe_puzzle_solver_v5.py` - Off-chain puzzle solver
 - `docs/` - Documentation
 - `examples/` - Usage examples
 - `paper/` - LaTeX papers
@@ -38,17 +45,31 @@ cd paper && pdflatex tlos.tex && pdflatex tlos.tex && pdflatex tlos-paper.tex &&
 
 **60,000,000 gas** (60M) - updated as of 2024
 
-## Current Parameters (n=768 LWE)
+## Current Parameters (n=384 LWE with Gaussian noise)
 
 | Parameter | Value |
 |-----------|-------|
-| LWE dimension | n=768 |
-| PQ security | ~120-140 bit |
-| Classical security | ~250+ bit |
-| Gas | ~10.5M-38.1M (17-63% of 60M block) |
-| Storage | seed-derived a vectors |
+| LWE dimension | n=384 |
+| Gaussian noise | σ=8 |
+| Modulus | q=65521 |
+| PQ security | ~2^112 (lattice estimator) |
+| Gas | 1.8M-6M (3-10% of 60M block) |
+| Storage | seed-derived a vectors (11 bytes/gate) |
 | Batch size | 128 gates |
 | Binding updates | 5 for 640 gates |
+
+## Layer 4 Puzzle Parameters (WeakLWEPuzzleV7)
+
+| Parameter | Value |
+|-----------|-------|
+| Secret dimension n | 48 |
+| Samples m | 72 |
+| Modulus q | 2039 |
+| Error range | {-2,-1,0,1,2} |
+| Threshold | 300 |
+| Search space | 3^48 ≈ 2^76 |
+| Verification gas | 1.26M |
+| GPU brute-force | 436M guesses/sec (GH200) |
 
 ## Paper Formatting (CRITICAL)
 

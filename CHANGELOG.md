@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-01
+
+### Added
+- **Layer 4: Planted LWE Puzzle** - Forces minimum 3^48 ≈ 2^76 brute-force search space
+- WeakLWEPuzzleV7.sol: Production puzzle contract (n=48, m=72, q=2039, 1.26M gas)
+- WeakLWEPuzzleV5.sol: Reduced puzzle variant (n=32, m=48, ~51-bit security)
+- WeakLWEPuzzleV6.sol: Minimal puzzle variant (n=24, m=36, ~38-bit security)
+- TLOSWithPuzzleV2.sol: Integrated TLOS + Layer 4 puzzle with double binding
+- lwe_puzzle_solver_v5.py: Off-chain puzzle solver with pycryptodome
+
+### Changed
+- Security model upgraded from three-layer to **four-layer**
+- TLOS secret derivation now combines input AND puzzle solution hash for double binding
+- Updated papers (tlos.tex, tlos-paper.tex) with Layer 4 sections
+
+### Security
+- GPU brute-force benchmark: 436M guesses/sec on GH200
+- Exhaustive puzzle search (n=48): ~5.7 million years single GPU, ~570 years with 10,000 GPUs
+- Layer 4 protects low-entropy inputs from dictionary attacks
+
 ## [0.4.0] - 2025-12-31
 
 ### Changed

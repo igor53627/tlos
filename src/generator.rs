@@ -3,7 +3,7 @@ use rand_chacha::ChaCha20Rng;
 use sha3::{Digest, Keccak256};
 
 use crate::circuit::{create_six_six_circuit, SixSixConfig};
-use crate::lblo::{derive_secret, encode_gate};
+use crate::lwe::{derive_secret, encode_gate};
 use crate::wire_binding::{wire_binding_init, wire_binding_update, BindingOutput};
 
 const BATCH_SIZE: u32 = 128;
@@ -23,12 +23,12 @@ pub fn generate_tlos(secret: [u8; 32], circuit_seed: u64) -> TLOSDeployment {
     let config = SixSixConfig::new(circuit_seed);
     let circuit = create_six_six_circuit(&config);
 
-    let lblo_secret = derive_secret(secret);
+    let lwe_secret = derive_secret(secret);
     let mut rng = ChaCha20Rng::seed_from_u64(circuit_seed.wrapping_add(0x12345678));
 
     let mut circuit_data = Vec::new();
     for gate in &circuit.gates {
-        let encoded = encode_gate(gate, &lblo_secret, &mut rng);
+        let encoded = encode_gate(gate, &lwe_secret, &mut rng);
         circuit_data.extend_from_slice(&encoded);
     }
 
@@ -115,11 +115,12 @@ mod tests {
 
     #[test]
     fn test_generate_tlos() {
+        use crate::lwe::GATE_SIZE;
         let secret = [0x42u8; 32];
         let deployment = generate_tlos(secret, 12345);
         assert_eq!(deployment.num_wires, 64);
         assert_eq!(deployment.num_gates, 640);
-        assert_eq!(deployment.circuit_data.len(), 640 * 1035);
+        assert_eq!(deployment.circuit_data.len(), 640 * GATE_SIZE);
         // Wire binding output should have content in at least one word
         assert!(deployment.expected_binding_output.is_nonzero());
     }

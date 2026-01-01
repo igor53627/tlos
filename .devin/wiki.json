@@ -1,0 +1,83 @@
+{
+  "name": "TLOS",
+  "description": "Four-layer post-quantum obfuscation: TLO + wire binding + planted LWE puzzle",
+  "version": "0.5.0",
+  "repository": "https://github.com/igor53627/tlos",
+  "language": ["Solidity", "Rust", "Python"],
+  "frameworks": ["Foundry", "Cargo"],
+  "architecture": {
+    "contracts": {
+      "TLOS": "Main contract with Binary-Error LWE + wire binding (Layers 1-3)",
+      "TLOSOptimized": "Gas-optimized variant with configurable n (128/256/512/768)",
+      "TLOSWithPuzzleV2": "Full 4-layer integration with planted LWE puzzle (n=48)",
+      "WeakLWEPuzzleV7": "Standalone puzzle contract (n=48, m=72, production)",
+      "WeakLWEPuzzleV5": "Reduced puzzle variant (n=32, m=48)",
+      "TLOSKeccak": "Legacy classical-only variant (deprecated)"
+    },
+    "rust": {
+      "generator": "Generates deployment data for TLOS contracts",
+      "seh_lwe": "LWE-based SEH implementation matching Solidity"
+    },
+    "scripts": {
+      "lwe_puzzle_solver_v5": "Off-chain puzzle solver with pycryptodome"
+    }
+  },
+  "parameters": {
+    "lwe_dimension": 768,
+    "pq_security_bits": "120-140",
+    "classical_security_bits": 250,
+    "seh_matrix_size": "64x64",
+    "q": 65521,
+    "batch_size": 128,
+    "default_gates": 640,
+    "puzzle": {
+      "n": 48,
+      "m": 72,
+      "q": 2039,
+      "threshold": 300,
+      "search_space": "3^48 ≈ 2^76",
+      "verification_gas": "1.26M"
+    }
+  },
+  "gas": {
+    "TLOSLWE_64_gates": "~10.5M",
+    "TLOSLWE_128_gates": "~19.3M",
+    "TLOSLWE_256_gates": "~38.1M",
+    "puzzle_verification": "~1.26M",
+    "block_percentage": "17-66%"
+  },
+  "security": {
+    "layers": [
+      {"name": "Topology", "type": "heuristic", "security": "empirical"},
+      {"name": "Binary-Error LWE", "type": "computational", "security": "~2^120-140 PQ"},
+      {"name": "Wire Binding", "type": "algebraic", "security": "bijective binding"},
+      {"name": "Planted LWE Puzzle", "type": "computational", "security": "~2^76 minimum"}
+    ],
+    "gpu_benchmark": {
+      "device": "GH200",
+      "rate": "436M guesses/sec",
+      "exhaustive_search": "~5.7 million years"
+    }
+  },
+  "commands": {
+    "build": "forge build",
+    "test": "forge test",
+    "benchmark": "forge script scripts/BenchmarkTLOS.s.sol --rpc-url $TENDERLY_RPC --broadcast --unlocked -vvv",
+    "generate": "cargo run --bin generate_tlos -- --secret 0x... --seed 42",
+    "solve_puzzle": "python scripts/lwe_puzzle_solver_v5.py"
+  },
+  "references": [
+    {
+      "name": "Ma-Dai-Shi 2025",
+      "url": "https://eprint.iacr.org/2025/307",
+      "description": "Quasi-Linear iO from LWE"
+    },
+    {
+      "name": "TLO Base",
+      "url": "https://github.com/igor53627/tlo",
+      "description": "Original TLO construction (archived)"
+    }
+  ],
+  "status": "active",
+  "lastUpdated": "2026-01-01"
+}

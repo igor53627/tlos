@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Long-running LBLO attack suite for remote execution.
+Long-running TLOS/LWE attack suite for remote execution.
 Designed to run for hours on larger instances.
 
 Usage:
-    python3 lblo_attack_long.py [--hours N] [--n-max N]
+    python3 tlos_attack_long.py [--hours N] [--n-max N]
     
 Example:
-    python3 lblo_attack_long.py --hours 4 --n-max 24
+    python3 tlos_attack_long.py --hours 4 --n-max 24
 """
 
 import numpy as np
@@ -39,7 +39,7 @@ def derive_secret(seed: bytes, n: int) -> np.ndarray:
             s[chunk_idx * 16 + i] = val % Q
     return s
 
-def generate_lblo_instance(n: int, m: int, seed: bytes):
+def generate_lwe_instance(n: int, m: int, seed: bytes):
     np.random.seed(int.from_bytes(seed[:4], 'big'))
     s = derive_secret(seed, n)
     A = np.random.randint(0, Q, size=(m, n), dtype=np.int64)
@@ -94,7 +94,7 @@ def exhaustive_attack(n: int, m: int, seed: bytes, time_limit_sec: float = 3600)
     """
     log(f"Starting exhaustive attack: n={n}, m={m}, limit={time_limit_sec}s")
     
-    A, b, s, _mu = generate_lblo_instance(n, m, seed)
+    A, b, s, _mu = generate_lwe_instance(n, m, seed)
     
     start = time.time()
     attempts = 0
@@ -172,7 +172,7 @@ def run_scaling_analysis(n_values: list, time_per_n: float = 300):
 def run_long_suite(max_hours: float = 4, n_max: int = 24):
     """Run the full long-running attack suite."""
     log("="*60)
-    log("LBLO LONG-RUNNING ATTACK SUITE")
+    log("TLOS LONG-RUNNING ATTACK SUITE")
     log("="*60)
     log(f"Max runtime: {max_hours} hours")
     log(f"Max n: {n_max}")
@@ -229,7 +229,7 @@ def run_long_suite(max_hours: float = 4, n_max: int = 24):
         seed = f"stats_n{n}".encode()
         
         log(f"\nAnalyzing n={n}, m={m}")
-        A, b, _s, mu = generate_lblo_instance(n, m, seed)
+        A, b, _s, mu = generate_lwe_instance(n, m, seed)
         
         # Statistical tests
         b_mean = np.mean(b)
@@ -278,14 +278,14 @@ def run_long_suite(max_hours: float = 4, n_max: int = 24):
             log(f"  This is {years_128/1e10:.0f}x the age of the universe")
     
     log("\n" + "="*60)
-    log("CONCLUSION: LBLO construction is secure against exhaustive attacks")
+    log("CONCLUSION: TLOS construction is secure against exhaustive attacks")
     log("Security estimate remains ~2^98 PQ / ~2^203 classical")
     log("="*60)
     
     return results
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Long-running LBLO attack suite")
+    parser = argparse.ArgumentParser(description="Long-running TLOS/LWE attack suite")
     parser.add_argument("--hours", type=float, default=4, help="Max runtime in hours")
     parser.add_argument("--n-max", type=int, default=24, help="Max n value to test")
     args = parser.parse_args()

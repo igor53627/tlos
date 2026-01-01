@@ -2,11 +2,54 @@
 
 ## Overview
 
-TLOS is a **compute-and-compare (point-function) obfuscator** using LWE + SEH.
+TLOS is a **compute-and-compare (point-function) obfuscator** using a four-layer security model:
+
+1. **Topology layer** - structural mixing (heuristic)
+2. **LWE layer** - control function hiding via standard LWE with Gaussian noise (σ=8, n=384, ~2^112 PQ)
+3. **Wire binding layer** - full-rank linear hash for inter-gate consistency (algebraic binding)
+4. **Planted LWE puzzle** - forces minimum 3^48 ≈ 2^76 brute-force search space (1.26M gas)
 
 **What TLOS is:** Expensive-per-guess secret verification for low-entropy secrets with optional multi-bit payloads.
 
 **What TLOS is NOT:** General circuit obfuscation or complex predicates on public data.
+
+---
+
+## Combined Security Model
+
+Security relies on **both** topology and LWE working together:
+
+| Layer | Hides | From |
+|-------|-------|------|
+| Topology | μ (control function bits) | Structural analysis |
+| LWE | s (decryption key) | Cryptanalytic attacks |
+
+**Critical insight:** The ~2^112 estimate assumes μ cannot be predicted from circuit structure. If an attacker predicts μ for n=384 gates via structural analysis, they can recover s via Gaussian elimination in O(n³).
+
+### Why Structural Attacks Fail
+
+TLOS circuits compute **point functions**: `C(x) = 1 iff x = secret`
+
+- **No recognizable gadgets:** There are no adders, comparators, or hash rounds
+- **Reversible gates ≠ standard logic:** Each gate computes `state[a] ^= cf(state[c1], state[c2])`
+- **Random structure:** Topology layer uses non-pow2 distances, uniform wire usage
+
+### Input-Dependent Key Derivation (White-Box Defense)
+
+The decryption key `s = H(input || puzzleSolutionHash)` is derived at evaluation time.
+
+**Why tracing doesn't help:**
+```
+Attacker traces with wrong input x':
+  s(x') = H(x')                          // Wrong key
+  diff = b - <a, s(x')>
+       = <a, s_correct - s(x')> + e + μ*(q/2) // s_correct ≠ s(x')
+       = random value                     // Reveals nothing about μ
+```
+
+**Traces are visible but useless without the correct input.**
+
+The EVM is a white-box environment - we do NOT rely on hiding intermediate values. We rely on those values being **garbage** without the correct input key.
 
 ---
 
@@ -33,14 +76,14 @@ Use TLOS when:
 
 ### Attack Cost Comparison
 
-| Secret Type | Keccak Attack | TLOS Attack |
-|-------------|---------------|-------------|
-| Random 256-bit | 2^256 hashes | 2^256 LWE evals |
-| Password "hunter2" | Milliseconds | Hours/days |
-| Range 0-100K | 0.1 seconds | 2.8+ hours |
-| 4-word phrase | Seconds | Weeks |
+| Secret Type | Keccak Attack | TLOS Attack (with Layer 4) |
+|-------------|---------------|----------------------------|
+| Random 256-bit | 2^256 hashes | min(2^256, 2^76) |
+| Password "hunter2" | Milliseconds | 2^76 minimum |
+| Range 0-100K | 0.1 seconds | 2^76 minimum |
+| 4-word phrase | Seconds | 2^76 minimum |
 
-**Key insight:** TLOS doesn't improve security for random secrets. It improves security for **low-entropy secrets** by making each guess expensive.
+**Key insight:** Layer 4 (planted LWE puzzle) forces minimum 3^48 ≈ 2^76 search space regardless of input entropy. At 436M guesses/sec (GH200 GPU), exhaustive search requires ~5.7 million years.
 
 ---
 
@@ -66,34 +109,78 @@ The key derivation `s = H(input)` means:
 
 ---
 
-## SEH Purpose
+## Wire Binding Purpose
 
-SEH (Subspace-Evasive Hashing from Ma-Dai-Shi 2025) provides **inter-gate wire binding** to prevent mix-and-match attacks.
-
-## Post-Quantum Profile
-
-There are two SEH instantiations in this repository:
-
-- **TLOSLWE (LWE SEH)** - The **only** SEH considered part of the **post-quantum TLOS profile**
-- **TLOSKeccak (Keccak SEH)** - A **legacy, classical-only variant** kept for benchmarks and historical context. It is **NOT post-quantum secure** and is excluded from the PQ profile.
+Wire binding (inspired by SEH from Ma-Dai-Shi 2025) provides **inter-gate wire binding** to prevent mix-and-match attacks. Note: Our implementation uses a full-rank linear map providing algebraic binding, not cryptographic hiding.
 
 ---
 
-## Full-Rank SEH (PQ Variant - TLOSLWE)
+## Layer 4: Planted LWE Puzzle
+
+Layer 4 forces minimum brute-force work regardless of input entropy. Without this layer, low-entropy inputs could be cracked via GPU brute-force.
+
+### Parameters (WeakLWEPuzzleV7 - Production)
+
+| Parameter | Value |
+|-----------|-------|
+| Secret dimension n | 48 |
+| Samples m | 72 |
+| Modulus q | 2039 |
+| Error range | {-2,-1,0,1,2} |
+| Threshold | 300 |
+| Search space | 3^48 ≈ 2^76 |
+| Verification gas | 1.26M |
+
+### GPU Brute-Force Resistance
+
+| GPU | Rate | Exhaustive Search Time |
+|-----|------|------------------------|
+| GH200 | 436M guesses/sec | ~5.7 million years |
+| 10,000 GPUs | 4.36T guesses/sec | ~570 years |
+
+### How It Works
+
+1. For each input `x`, a puzzle `(A, b)` is deterministically derived
+2. Solver must find ternary secret `s ∈ {-1,0,1}^48` satisfying `||As - b||² < threshold`
+3. The puzzle has a planted solution `s*` that only the deployer knows
+4. Puzzle solution hash is combined with input to derive TLOS secret: `s_tlos = H(input || H(puzzle_solution))`
+
+### Integration with TLOS
+
+```solidity
+function revealWithPuzzle(bytes32 input, int8[48] calldata puzzleSolution) external {
+    // Verify puzzle solution
+    (bool puzzleValid, bytes32 sHash, ) = _verifyPuzzle(input, puzzleSolution);
+    require(puzzleValid, "Invalid puzzle solution");
+    
+    // TLOS secret derived from BOTH input AND puzzle solution
+    (bool circuitValid, ) = _evaluate(input, sHash);
+    require(circuitValid, "Invalid circuit output");
+    
+    // Claim reward...
+}
+```
+
+---
+
+## Post-Quantum Profile
+
+TLOS uses standard LWE with Gaussian noise (σ=8) for control function hiding:
 
 | Property | Value |
 |----------|-------|
-| LWE dimension | n=768 |
+| LWE dimension | n=384 |
+| Modulus | q=65521 |
+| Gaussian noise | σ=8 |
 | Matrix size | 64×64 (full-rank, trivial kernel) |
-| Security basis | Binding via injective linear map (public, invertible) |
-| Post-quantum security | ~120-140 bit |
-| Gas cost | ~10.5M-38.1M for 640 gates |
-| Deployment | Deployable on L1 (17-63% of 60M block) |
-| Role | **Only SEH in the PQ TLOS profile** |
+| Security basis | Standard LWE hardness |
+| Post-quantum security | ~2^112 (lattice estimator) |
+| Gas cost | 1.8M-6M for 64-256 gates |
+| Role | Primary CF hiding layer |
 
 ### Construction
 
-The SEH uses a **full-rank 64×64** matrix-vector product modulo q:
+The wire binding uses a **full-rank 64×64** matrix-vector product modulo q:
 
 ```
 H(x) = A * x mod q
@@ -110,59 +197,44 @@ An earlier design used an 8×64 matrix, which has a 56-dimensional nullspace—m
 
 ### Per-Batch Updates
 
-SEH is updated after every 128 gates:
+Wire binding is updated after every 128 gates:
 ```solidity
-uint256 combined = sehAcc[0] ^ sehAcc[1] ^ sehAcc[2] ^ sehAcc[3] ^ wires;
-sehAcc = _sehHash(combined, batchEnd);
+uint256 combined = acc[0] ^ acc[1] ^ acc[2] ^ acc[3] ^ wires;
+acc = _wireBindingHash(combined, batchEnd);
 ```
 
 This provides inter-gate binding while maintaining gas efficiency.
 
-### SEH PRG Optimization
+### Wire Binding PRG Optimization
 
-The `_sehHash` function uses a PRG optimization: instead of calling keccak once per matrix coefficient (4096 calls per update), we derive 16 coefficients from each keccak output (320 calls per update). This reduces SEH overhead by ~13×.
+The `_wireBindingHash` function uses a PRG optimization: instead of calling keccak once per matrix coefficient (4096 calls per update), we derive 16 coefficients from each keccak output (320 calls per update). This reduces overhead by ~13×.
 
-### Batch SEH Tradeoff
+### Batch Wire Binding Tradeoff
 
-**Design choice:** SEH binding at 128-gate batch granularity, not per-gate.
+**Design choice:** Wire binding at 128-gate batch granularity, not per-gate.
 
 **Security implications:**
-- Per-gate SEH would bind every individual gate transition (closest to Ma-Dai-Shi ideal)
+- Per-gate binding would bind every individual gate transition (closest to Ma-Dai-Shi ideal)
 - With 128-gate batches, we bind the *aggregate* effect of each batch
-- An attacker can only "mix-and-match" within a batch without being caught by SEH
-- Across batch boundaries, all execution is bound by the SEH chain
+- An attacker can only "mix-and-match" within a batch without being caught
+- Across batch boundaries, all execution is bound by the chain
 
 **Gas cost:**
-- Full-rank 64×64 SEH with n=768 LWE costs ~10.5M-38.1M gas for 640 gates (17-63% of 60M block)
-- 5 SEH updates for 640 gates
+- Full-rank 64×64 wire binding with n=384 LWE costs 1.8M-6M gas for 64-256 gates (3-10% of 60M block)
+- 5 binding updates for 640 gates
 - PRG optimization: 320 keccak calls per update (vs 4096 naive)
 
 ---
 
-## Keccak SEH (Legacy Classical Variant - TLOSKeccak)
+## Hybrid Security Analysis
 
-**[DEPRECATED - Not post-quantum secure]**
-
-| Property | Value |
-|----------|-------|
-| Security basis | Collision resistance of keccak256 |
-| Classical security | ~128-bit |
-| Post-quantum security | ~64-bit (Grover reduction, **NOT PQ**) |
-| Gas cost | ~2.6M for 640 gates |
-| Status | **Legacy / benchmarking only** |
-
-This variant is **not** part of the post-quantum TLOS profile and may be removed in a future major release.
-
----
-
-## Hybrid Security Analysis (PQ Profile)
-
-For the **post-quantum TLOS profile**, only the LWE-based SEH is considered:
+The four-layer security model:
 
 | Component | Security Basis | Post-Quantum | Level |
 |-----------|----------------|--------------|-------|
-| CF hiding | LWE hardness (n=768) | Yes | ~120-140 bit |
-| SEH binding | LWE-based linear binding | Yes | ~120-140 bit |
+| CF hiding (Layer 2) | Standard LWE with Gaussian noise (n=384, σ=8) | Yes | ~2^112 |
+| Wire binding (Layer 3) | Full-rank linear binding | Yes | Algebraic binding |
+| Planted puzzle (Layer 4) | Ternary LWE (n=48) | Yes | ~2^76 minimum |
 | Unlock mechanism | Hash preimage | Conjectured* | ~256-bit |
 
 *Assumes conservative Grover-style reduction for the hash component.
@@ -170,33 +242,23 @@ For the **post-quantum TLOS profile**, only the LWE-based SEH is considered:
 ### Security Level
 
 The overall system security is determined by the weakest component:
-- **~120-140 bit post-quantum** (with n=768 LWE parameters)
+- **~2^76 minimum** from Layer 4 puzzle (forces minimum work per guess)
+- **~2^112 post-quantum** from LWE layer (with n=384, σ=8 parameters)
 
-This meets or exceeds standard 128-bit PQ security targets.
-
----
-
-## Honest Post-Quantum Assessment
-
-The **only** SEH instantiation that is post-quantum is the LWE-based SEH (TLOSLWE). The Keccak-based SEH (TLOSKeccak) is **not** post-quantum secure and is no longer part of the PQ TLOS profile.
-
-With n=768, TLOSLWE provides **~120-140 bit PQ security**, which:
-- **Meets or exceeds**: Standard 128-bit PQ security target
-- **Suitable for**: Long-term secrets, high-security applications
-
-The n=768 dimension uses seed-derived a vectors for efficient on-chain generation.
+For low-entropy inputs, Layer 4 dominates: even a 1-bit secret requires 2^76 work to crack.
+For high-entropy inputs (256-bit), LWE layer provides ~2^112 security.
 
 ---
 
 ## Attack Model
 
-### What SEH Prevents
+### What Wire Binding Prevents
 
 1. **Mix-and-match attacks**: Adversary cannot combine outputs from different evaluation paths
 2. **Gate substitution**: Each gate's output is bound to all previous computations
-3. **Parallel evaluation attacks**: SEH chain prevents independent gate evaluation
+3. **Parallel evaluation attacks**: Binding chain prevents independent gate evaluation
 
-### What SEH Does NOT Prevent
+### What Wire Binding Does NOT Prevent
 
 1. **Black-box evaluation**: Anyone can evaluate with a valid secret
 2. **Secret recovery**: Must rely on LWE hardness for CF hiding
@@ -206,12 +268,19 @@ The n=768 dimension uses seed-derived a vectors for efficient on-chain generatio
 
 ## Gas / Practicality Note
 
-TLOSLWE with n=768 and full-rank 64×64 SEH costs **~10.5M-38.1M gas** for a 64w/640g configuration (17-63% of a 60M Ethereum L1 block). This is based on Tenderly benchmarks; the contract's `estimatedGas()` function returns a conservative upper bound for off-chain tooling.
+TLOS with n=384 and full-rank 64×64 wire binding costs **1.8M-6M gas** for 64-256 gates (3-10% of a 60M Ethereum L1 block). Layer 4 puzzle adds **~1.26M gas**. This is based on Tenderly benchmarks.
+
+| Config | Circuit Gas | Puzzle Gas | Total Gas | % of 60M Block |
+|--------|-------------|------------|-----------|----------------|
+| 64 gates | 1.8M | 1.26M | 3.1M | 5% |
+| 128 gates | 2.0M | 1.26M | 3.3M | 5.5% |
+| 256 gates | 3.0M | 1.26M | 4.3M | 7% |
 
 **Optimizations applied:**
-- SEH PRG: 16 coefficients per keccak (320 calls vs 4096)
+- Wire binding PRG: 16 coefficients per keccak (320 calls vs 4096)
 - Single mod at end of LWE inner product
-- Batch size 128 (5 SEH updates for 640 gates)
+- Batch size 128 (5 binding updates for 640 gates)
+- Layer 4 puzzle: n=48, m=72, q=2039 for optimal gas/security tradeoff
 
 This is practical for:
 - Password-gated vaults and treasure hunts

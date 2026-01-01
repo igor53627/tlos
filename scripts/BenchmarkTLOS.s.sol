@@ -5,8 +5,8 @@ import "forge-std/Script.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 import "../contracts/TLOS.sol";
 
-/// @title Benchmark TLOS (LBLO + Wire Binding) on Tenderly
-/// @notice Measures gas costs for full-rank 64x64 wire binding with n=128 LBLO
+/// @title Benchmark TLOS (LWE + Wire Binding) on Tenderly
+/// @notice Measures gas costs for full-rank 64x64 wire binding with n=384 LWE
 contract BenchmarkTLOS is Script {
     uint256 constant Q = 65521;
     address deployer = 0x05c84d05844bAc8bA8C535C3110ea3CFBA424bE9;
@@ -14,7 +14,7 @@ contract BenchmarkTLOS is Script {
     function run() external {
         vm.startBroadcast(deployer);
         
-        console.log("=== TLOS Gas Benchmark (n=128 LBLO, Full-rank 64x64 Wire Binding, 640 gates) ===");
+        console.log("=== TLOS Gas Benchmark (n=384 LWE, Full-rank 64x64 Wire Binding, 640 gates) ===");
         console.log("");
         
         bytes memory circuitData = _generateData(640, 128);
@@ -32,7 +32,7 @@ contract BenchmarkTLOS is Script {
         console.log("");
         console.log("=== Summary ===");
         console.log("Block gas limit: 30,000,000");
-        console.log("LBLO Dimension: n=128 (heuristic ~2^98 PQ security)");
+        console.log("LWE Dimension: n=384, sigma=8 (~2^112 PQ security)");
         console.log("Wire Binding Matrix: 64x64 (full-rank, algebraic binding)");
     }
     
