@@ -53,7 +53,7 @@ cd paper && pdflatex tlos.tex && pdflatex tlos.tex && pdflatex tlos-paper.tex &&
 | Gaussian noise | σ=8 |
 | Modulus | q=65521 |
 | PQ security | ~2^112 (lattice estimator) |
-| Gas | 1.8M-6M (3-10% of 60M block) |
+| Gas | 4.3M-9.6M (7-16% of 60M block) |
 | Storage | seed-derived a vectors (11 bytes/gate) |
 | Batch size | 128 gates |
 | Binding updates | 5 for 640 gates |
