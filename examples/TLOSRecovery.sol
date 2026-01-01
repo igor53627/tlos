@@ -43,7 +43,7 @@ contract TLOSRecovery {
     }
 
     /// @notice Recover wallet ownership using the correct phrase and puzzle solution
-    /// @param phrase The keccak256 hash of the recovery phrase (32 bytes)
+    /// @param phrase The raw recovery phrase as bytes32 (will be hashed internally to verify)
     /// @param puzzleSolution The ternary solution to the planted LWE puzzle
     function recover(bytes32 phrase, int8[48] calldata puzzleSolution) external {
         require(block.number > lastAttemptBlock, "Rate limited: 1 attempt per block");

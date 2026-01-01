@@ -100,7 +100,7 @@ Why use TLOS instead of `keccak256(secret)`? For random 256-bit secrets, keccak 
 | Range 0-100K | ~0.1 seconds | 2^76 minimum* |
 | 4-word phrase | Seconds | 2^76 minimum* |
 
-*Layer 4 puzzle forces minimum 3^48 ≈ 2^76 search space regardless of input entropy. At ~2M guesses/sec (RTX 4090), exhaustive search takes ~1.2 billion years. See **Security Disclaimer**.
+*Layer 4 puzzle forces minimum 3^48 ≈ 2^76 search space regardless of input entropy. At 1B guesses/sec (GH200 FP16, worst-case), exhaustive search takes ~2.5 million years. See **Security Disclaimer**.
 
 **Key insight:** TLOS provides a practical way to make low-entropy secret verification expensive on EVM - no memory-hard KDF (Argon2/scrypt) exists as a precompile.
 
@@ -133,7 +133,7 @@ Security is based on standard LWE hardness with Gaussian noise (σ=8). The latti
 | Search space | 3^48 ≈ 2^76 |
 | Verification gas | 1.26M |
 
-**GPU brute-force resistance:** At ~2M guesses/sec (RTX 4090), exhaustive search requires ~1.2 billion years.
+**GPU brute-force resistance:** At 1B guesses/sec (GH200 FP16, worst-case), exhaustive search requires ~2.5 million years. Even 10,000 GPUs (~250 years) cannot crack in practical time.
 
 ### What Wire Binding Provides
 - **Mix-and-match prevention**: Gates cannot be evaluated with inconsistent inputs
@@ -185,6 +185,8 @@ tlos/
 │   ├── lwe.rs                # LWE encoding (Gaussian noise, σ=8)
 │   ├── wire_binding.rs       # Wire binding implementation
 │   ├── generator.rs          # Deployment generator
+│   ├── security/             # Security estimation
+│   │   └── lattice_estimator.rs  # lattice-estimator CLI wrapper
 │   └── bin/
 │       └── generate_tlos.rs  # CLI binary
 ├── scripts/
@@ -198,7 +200,35 @@ tlos/
 │   ├── tlos-paper.pdf        # Full paper (source of truth)
 │   └── tlos.pdf              # Short paper
 └── examples/
+    ├── TLOSVault.sol         # DeFi: Hidden liquidation threshold (DEMO ONLY)
+    ├── TLOSKitties.sol       # NFT: Hidden trait generation (n=128, reduced)
+    ├── TLOSRecovery.sol      # Wallet: Phrase-based recovery with puzzle
+    ├── TLOSTreasureHunt.sol  # Honeypot: Commit-reveal + puzzle (educational)
+    ├── TLOSSealedAuction.sol # Gaming: Sealed-bid auction with puzzle
+    ├── TLOSDeadManSwitch.sol # Inheritance: Heartbeat + hidden heir codes
+    └── TLOSStopLoss.sol      # DeFi: Hidden stop-loss triggers
 ```
+
+## Example Contracts
+
+The `examples/` directory contains demonstration contracts showing TLOS integration patterns for various use cases. **These are for education only - see warnings in each file.**
+
+| Example | Use Case | Layers Used | LWE n | Puzzle | Production Ready |
+|---------|----------|-------------|-------|--------|------------------|
+| TLOSWithPuzzleV3 | **Production** | 1-4 (all) | 384 | Yes | [OK] |
+| TLOSVault | DeFi liquidation | 2 (LWE only) | - | No | [X] Economically broken |
+| TLOSKitties | NFT traits | 2 (LWE only) | 128 | No | [X] Reduced security |
+| TLOSRecovery | Wallet recovery | 4 (puzzle) | - | Yes | [X] Needs phrase entropy |
+| TLOSTreasureHunt | Honeypot | 4 (puzzle) | - | Yes | [X] Educational |
+| TLOSSealedAuction | Sealed-bid auction | 4 (puzzle) | - | Yes | [X] Demo only |
+| TLOSDeadManSwitch | Inheritance | 4 (puzzle) | - | Yes | [X] Demo only |
+| TLOSStopLoss | Stop-loss trigger | 2 (circuit) | - | No | [X] Demo only |
+
+**Layer key:**
+- Layer 1: Topology mixing (structural)
+- Layer 2: LWE control function hiding (n=384, σ=8 for production)
+- Layer 3: Wire binding (algebraic)
+- Layer 4: Planted LWE puzzle (2^76 minimum search space)
 
 ## Security Disclaimer
 
@@ -210,6 +240,31 @@ TLOS security is based on the **standard LWE problem with Gaussian noise** and t
 - We encourage **independent cryptanalysis**
 - Attack scripts available in `scripts/tlos_attack.py` and `scripts/lwe_puzzle_solver_v5.py`
 - **Do not use for high-value, long-lived secrets** until further analysis is available
+
+## Development Dependencies
+
+For programmatic security estimation, set up the [lattice-estimator](https://github.com/malb/lattice-estimator):
+
+```bash
+# Clone the estimator (requires SageMath)
+git clone https://github.com/malb/lattice-estimator estimator
+export PYTHONPATH="$PYTHONPATH:$(pwd)/estimator"
+
+# Add the CLI to PATH
+export PATH="$PATH:$(pwd)/scripts"
+
+# Verify installation
+lattice-estimator-cli 384 65521 \
+    --s-dist '{"distribution":"uniform_mod"}' \
+    --e-dist '{"distribution":"discrete_gaussian","stddev":8.0}' \
+    --m 2560
+```
+
+Then run the ignored tests to validate security parameters:
+
+```bash
+cargo test -- --ignored
+```
 
 ## References
 
