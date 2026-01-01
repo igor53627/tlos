@@ -6,23 +6,36 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
 /// @title TLOSKitties - NFT Mystery Box with Hidden Trait Generation
 /// @notice Demonstration of TLOS for hiding NFT trait generation logic
-/// @dev This example shows how to use a shared TLOS circuit to generate
-///      hidden traits for an NFT collection. The circuit maps entropy to
-///      traits in a way that is verifiable but unpredictable.
 ///
-///      Key concepts:
-///      - circuitDataPointer: SSTORE2 pointer to shared obfuscated circuit data
-///      - evaluateTLOS: Evaluates the circuit to get trait output
-///      - decodeTraits: Extracts individual traits from circuit output
+/// @dev SECURITY WARNINGS:
 ///
-///      Security: With visible trait logic, minters could simulate which
-///      (blockhash, sender, tokenId) combinations yield rare traits.
-///      TLOS hides this mapping: deterministic and verifiable, but attackers
-///      cannot predict which inputs produce legendary traits.
+///   1. ENTROPY SOURCE: This example uses blockhash(block.number - 1) which is
+///      MINER-MANIPULABLE. For production, use Chainlink VRF or commit-reveal.
+///      Miners can withhold blocks to influence trait outcomes.
 ///
-///      NOTE: This is a simplified demonstration example, not production code.
-///      A production deployment would include the full LWE evaluation logic
-///      from TLOS.sol or TLOSWithPuzzleV3.sol.
+///   2. LWE DIMENSION: This example uses n=128 (LBLO_N constant) which provides
+///      REDUCED security (~2^64) for gas efficiency. Production deployments
+///      should use n=384 (from TLOSWithPuzzleV3.sol) for ~2^112 PQ security.
+///
+///   3. NO PUZZLE LAYER: This example omits Layer 4 (planted LWE puzzle).
+///      Without it, low-entropy inputs can be brute-forced. Production should
+///      include the puzzle for minimum 2^76 search space.
+///
+/// This example shows how to use a shared TLOS circuit to generate hidden
+/// traits for an NFT collection. The circuit maps entropy to traits in a
+/// way that is verifiable but unpredictable (to those without the secret).
+///
+/// Key concepts:
+///   - circuitDataPointer: SSTORE2 pointer to shared obfuscated circuit data
+///   - evaluateTLOS: Evaluates the circuit to get trait output
+///   - decodeTraits: Extracts individual traits from circuit output
+///
+/// Security model: With visible trait logic, minters could simulate which
+/// (blockhash, sender, tokenId) combinations yield rare traits. TLOS hides
+/// this mapping: deterministic and verifiable, but attackers cannot predict
+/// which inputs produce legendary traits.
+///
+/// For production TLOS usage, see: contracts/TLOSWithPuzzleV3.sol
 contract TLOSKitties is ERC721 {
     uint256 public constant Q = 65521;
     uint256 public constant LBLO_N = 128;

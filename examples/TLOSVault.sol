@@ -1,8 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+/// ##############################################################################
+/// #                                                                            #
+/// #   ██████╗  ██████╗     ███╗   ██╗ ██████╗ ████████╗    ██████╗ ███████╗   #
+/// #   ██╔══██╗██╔═══██╗    ████╗  ██║██╔═══██╗╚══██╔══╝    ██╔══██╗██╔════╝   #
+/// #   ██║  ██║██║   ██║    ██╔██╗ ██║██║   ██║   ██║       ██║  ██║█████╗     #
+/// #   ██║  ██║██║   ██║    ██║╚██╗██║██║   ██║   ██║       ██║  ██║██╔══╝     #
+/// #   ██████╔╝╚██████╔╝    ██║ ╚████║╚██████╔╝   ██║       ██████╔╝███████╗   #
+/// #   ╚═════╝  ╚═════╝     ╚═╝  ╚═══╝ ╚═════╝    ╚═╝       ╚═════╝ ╚══════╝   #
+/// #                                                                            #
+/// #   ██████╗ ███████╗██████╗ ██╗      ██████╗ ██╗   ██╗██╗                   #
+/// #   ██╔══██╗██╔════╝██╔══██╗██║     ██╔═══██╗╚██╗ ██╔╝██║                   #
+/// #   ██║  ██║█████╗  ██████╔╝██║     ██║   ██║ ╚████╔╝ ██║                   #
+/// #   ██║  ██║██╔══╝  ██╔═══╝ ██║     ██║   ██║  ╚██╔╝  ╚═╝                   #
+/// #   ██████╔╝███████╗██║     ███████╗╚██████╔╝   ██║   ██╗                   #
+/// #   ╚═════╝ ╚══════╝╚═╝     ╚══════╝ ╚═════╝    ╚═╝   ╚═╝                   #
+/// #                                                                            #
+/// ##############################################################################
+///
 /// @title TLOSVault - DeFi Vault with Hidden Liquidation Threshold
 /// @author TLOS Project
+///
+/// @dev CRITICAL: This contract is ECONOMICALLY BROKEN and for DEMONSTRATION ONLY!
+///
+/// Known issues that make this unsafe for production:
+///   1. liquidate() does not require the liquidator to repay the user's debt
+///   2. borrow() does not transfer any tokens to the borrower
+///   3. repay() does not collect any tokens from the repayer
+///   4. No actual stablecoin/token integration
+///   5. No price feed validation or staleness checks
+///   6. No access control on oracle/circuit addresses
+///
+/// This example ONLY demonstrates the TLOS integration pattern for MEV-resistant
+/// liquidation threshold hiding. For production DeFi, see Aave/Compound patterns.
+///
+/// For production TLOS usage, see: contracts/TLOSWithPuzzleV3.sol
+///
 /// @notice Demonstrates MEV-resistant liquidations using TLOS obfuscation
 ///
 /// ## How This Prevents MEV Front-Running
