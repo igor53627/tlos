@@ -76,9 +76,9 @@ TLOS uses **seed-derived `a` vectors** - the public LWE vectors are regenerated 
 
 | Config (n=384) | Gates | Storage | Old Format | Savings |
 |----------------|-------|---------|------------|---------|
-| Conservative | 64 | 704 bytes | 394 KB | 99.8% |
-| Balanced | 128 | 1.4 KB | 788 KB | 99.8% |
-| Full security | 256 | 2.8 KB | 1.58 MB | 99.8% |
+| Conservative | 64 | 704 bytes | 394 KB | 99.6% |
+| Balanced | 128 | 1.4 KB | 788 KB | 99.6% |
+| Full security | 256 | 2.8 KB | 1.58 MB | 99.6% |
 
 **Deployment scheme:**
 1. Deploy circuit data once via SSTORE2 (~615K gas for 256 gates)
@@ -100,7 +100,7 @@ Why use TLOS instead of `keccak256(secret)`? For random 256-bit secrets, keccak 
 | Range 0-100K | ~0.1 seconds | 2^76 minimum* |
 | 4-word phrase | Seconds | 2^76 minimum* |
 
-*Layer 4 puzzle forces minimum 3^48 ≈ 2^76 search space regardless of input entropy. At 436M guesses/sec (GH200 GPU), exhaustive search takes ~5.7 million years. See **Security Disclaimer**.
+*Layer 4 puzzle forces minimum 3^48 ≈ 2^76 search space regardless of input entropy. At ~2M guesses/sec (RTX 4090), exhaustive search takes ~1.2 billion years. See **Security Disclaimer**.
 
 **Key insight:** TLOS provides a practical way to make low-entropy secret verification expensive on EVM - no memory-hard KDF (Argon2/scrypt) exists as a precompile.
 
@@ -127,12 +127,13 @@ Security is based on standard LWE hardness with Gaussian noise (σ=8). The latti
 | Secret dimension n | 48 |
 | Samples m | 72 |
 | Modulus q | 2039 |
-| Error range | {-2,-1,0,1,2} |
+| Secret distribution | Ternary {-1,0,1} |
+| Error distribution | Uniform {-2,-1,0,1,2} |
 | Threshold | 300 |
 | Search space | 3^48 ≈ 2^76 |
 | Verification gas | 1.26M |
 
-**GPU brute-force resistance:** At 436M guesses/sec (GH200), exhaustive search requires ~5.7 million years. Even 10,000 GPUs (~570 years) cannot crack in practical time.
+**GPU brute-force resistance:** At ~2M guesses/sec (RTX 4090), exhaustive search requires ~1.2 billion years.
 
 ### What Wire Binding Provides
 - **Mix-and-match prevention**: Gates cannot be evaluated with inconsistent inputs
@@ -205,7 +206,7 @@ TLOS security is based on the **standard LWE problem with Gaussian noise** and t
 
 - The ~2^112 PQ estimate (for n=384, σ=8) is confirmed by the lattice estimator
 - Layer 4 puzzle provides **minimum 2^76 search space** regardless of input entropy
-- GPU brute-force benchmark: 436M guesses/sec on GH200 (exhaustive search: ~5.7 million years)
+- GPU brute-force benchmark: ~2M guesses/sec on RTX 4090 (exhaustive search: ~1.2 billion years)
 - We encourage **independent cryptanalysis**
 - Attack scripts available in `scripts/tlos_attack.py` and `scripts/lwe_puzzle_solver_v5.py`
 - **Do not use for high-value, long-lived secrets** until further analysis is available
