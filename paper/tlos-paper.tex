@@ -380,6 +380,11 @@ We describe the protocol through three actors:
 \]
 where $2^{76}$ is the one-time puzzle cost (must be paid before any input testing), $2^h$ is brute-force over inputs, and $2^{112}$ is LWE security. For low-entropy inputs ($h < 76$), the puzzle dominates; for high-entropy inputs, LWE dominates. The puzzle is instantiated once per contract; after it is solved, subsequent input guesses can be tested without re-solving the puzzle. Layers 1 (Topology) and 3 (Wire Binding) prevent structural/mix-and-match \emph{shortcuts}.
 
+\paragraph{Cost vs.~Time Security and What is Hidden.}
+It is important to clarify the sense in which \tlos{} is ``$2^{76}$-hard.'' Our guarantees are fundamentally about \emph{economic cost} (COST security), not absolute \emph{wall-clock time} (TIME security). The Layer~4 puzzle enforces about $3^{48} \approx 2^{76}$ \emph{unit operations} of work before any input testing can begin. An attacker with massive parallel resources can dramatically reduce elapsed time: for example, if a single GPU can perform $10^9$ candidate evaluations per second, then $2^{76}$ evaluations would take roughly $2.5{\times}10^6$ years on one GPU but only ${\sim}250$ years on a cluster of $10{,}000$ GPUs. The \emph{total} computational work, however, remains fixed at $2^{76}$ evaluations, so the aggregate hardware, energy, and operational cost scales with this exponent regardless of parallelism. Our security claims should therefore be read as: ``any successful brute-force adversary must invest work on the order of $2^{76}$ evaluations (plus ${\sim}2^{112}$ operations to break the LWE layer),'' not as a guarantee that the attack necessarily requires millions of years in wall-clock time against a well-funded, highly parallel adversary.
+
+We also stress what \tlos{} actually hides. The \emph{topology} of the reversible circuit---the number of wires, the sequence of gates $(g_1,\ldots,g_m)$, and the choice of active and control wires $(a, c_1, c_2)$ for each gate---is public and visible on-chain. The topology layer is designed to make structural inference attacks on control functions empirically hard, but it is not a secrecy mechanism for the circuit's wiring diagram. What is cryptographically hidden are the \emph{control-function bits} $\mu = (\mu_1,\ldots,\mu_m)$: for each gate, the $4$-bit truth table $c_f : \{0,1\}^2 \to \{0,1\}$ (one of 16 possibilities) is encrypted under \lwe{} and only recoverable with the correct key derived from the secret. Intuitively, the attacker sees the full circuit topology but cannot tell \emph{which} of the 16 reversible behaviors each gate implements without solving the underlying \lwe{} instances.
+
 \textbf{Out of scope:}
 \begin{itemize}
   \item EVM-level side channels (gas timing, storage access patterns)
@@ -1674,5 +1679,34 @@ The claim that $\mu$ is ``low-entropy'' because it describes a valid point funct
 \tlos{} has the latter, not the former. Individual $\mu$ values are essentially random bits---the ``valid circuit'' constraint is satisfied by exponentially many $\mu$ configurations. Lattice reduction exploits \emph{local} structure (e.g., sparse errors, ternary coefficients with bounded norm). It cannot exploit ``this sequence of random bits, when interpreted as gate operations, computes a point function.''
 
 \textbf{Key point:} With Gaussian noise $\sigma{=}8$, error entries are small but the overall error norm still exceeds the Gaussian heuristic threshold for BDD success. The lattice estimator confirms security.
+
+\subsection{Stronger Variant: On-Chain Randomness Binding}
+\label{sec:onchain-rand-binding}
+
+\paragraph{Offline Dictionary Attack in the Baseline Design.}
+In the baseline \tlos{} construction, all cryptographic computations are fully specified by on-chain data: the puzzle parameters $(A,b)$, the encrypted control functions, and the reversible topology are public. An adversary with the bytecode can \emph{perfectly simulate} the \texttt{check(x)} function offline for any candidate input $x'$, including the Layer~4 puzzle verification and the \lwe{}-based control-function evaluations. This means a brute-force attacker can run a complete dictionary attack off-chain, exploring an arbitrary number of candidates without paying gas for failed guesses. Only once a winning candidate $x^{*}$ is found (i.e., the simulated circuit outputs 1) does the attacker submit a single on-chain transaction to claim the reward. In this model, the $2^{76}$ puzzle cost is purely a \emph{computational} barrier (electricity, GPU time), not an on-chain cost: the chain only observes the final successful query.
+
+\paragraph{Binding to On-Chain Randomness.}
+To enforce an \emph{on-chain cost per attempt}, we can strengthen the construction by binding each evaluation of the circuit to on-chain randomness. Concretely, instead of evaluating the circuit directly on the user-supplied candidate $x$, the contract derives an internal circuit input
+\[
+  x_{\mathsf{bind}} \;=\; \mathsf{keccak256}\big(x \,\|\, \mathsf{blockhash}(\mathsf{block.number} - 1)\big)
+\]
+and runs the entire \tlos{} circuit (including the puzzle and \lwe{} layer) on $x_{\mathsf{bind}}$ rather than on $x$ itself. The previous-block hash $\mathsf{blockhash}(\mathsf{block.number} - 1)$ is a public, on-chain source of entropy that changes every block.
+
+Under this variant, the acceptance condition becomes a function of both the user input and the current block's hash. For any fixed, realized blockhash $r$, an attacker can still compute $x_{\mathsf{bind}} = \mathsf{keccak256}(x \,\|\, r)$ and simulate the \tlos{} circuit offline for arbitrary candidates $x$. What changes is that this offline work is now specific to that block's randomness and cannot be precomputed once and reused across future blocks with different hashes. Consequently, the randomness binding does not eliminate offline simulation, but it does prevent an adversary from performing a single, once-and-for-all exhaustive search on a static instance and later ``cashing in'' that work across many blocks.
+
+\paragraph{Economic Effect.}
+From an economic perspective, the randomness-bound variant does not prevent offline simulation of the circuit for a fixed blockhash, but it prevents a one-time exhaustive search from being reusable across many future blocks. Any large-scale guessing strategy must track the current blockhash and redo its offline work as the on-chain randomness evolves. If the surrounding protocol additionally limits guesses per block or per account (e.g., via a commit-reveal structure that permits only one reveal per commit), then this can effectively translate into a gas cost per on-chain guess. Absent such protocol-level limits, the dominant cost for an attacker remains offline computation (electricity, hardware) rather than gas.
+
+\paragraph{Honest-User Tradeoff.}
+The same binding affects honest users. Because the internal input $x_{\mathsf{bind}}$ depends on the \emph{current} $\mathsf{blockhash}(\mathsf{block.number} - 1)$, an honest solver who knows the secret cannot fully pre-compute the entire circuit evaluation \emph{before} the randomness is fixed. They can still pre-compute the parts that depend only on their secret (e.g., $s^* = H(\text{``planted''} \| \mathsf{secret})$ in the puzzle layer), but the final success condition now depends on on-chain entropy. Conceptually, this variant simply composes the original point function $C$ with a public pre-processing step $x \mapsto x_{\mathsf{bind}}$, so the ``secret'' encoded in $C$ is unchanged; only the effective input becomes block-dependent.
+
+\paragraph{When to Use Which Variant.}
+We view the randomness-bound construction as an optional strengthening layer:
+\begin{itemize}
+  \item \textbf{Time-sensitive, adversarial settings.} For on-chain puzzles, competitive games, or sealed-bid auctions where adversaries are expected to leverage large GPU clusters, the randomness-bound variant is preferable. Combined with protocol-level constraints (e.g., one reveal per commit), it can ensure that large-scale guessing strategies must pay gas for each oracle interaction.
+  \item \textbf{Non-time-sensitive, purely offline-hard settings.} For long-lived recovery codes, ENS name protection, or inheritance schemes where the main goal is to make offline cracking economically infeasible, the baseline design may suffice. Allowing honest users to precompute the puzzle solution offline can be more convenient.
+\end{itemize}
+In summary, the baseline \tlos{} construction provides strong \emph{computational} (COST) security against offline attackers. The on-chain randomness-bound variant further ties correctness to evolving on-chain entropy, which can be combined with protocol-level limits on guesses (e.g., one reveal per commit or per block) to induce an \emph{on-chain} economic cost for large-scale oracle queries. By itself, the randomness binding does not prevent offline simulation for a fixed blockhash, but it prevents one-time precomputation from being reused across many future blocks.
 
 \end{document}
