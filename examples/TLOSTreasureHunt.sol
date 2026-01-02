@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /// @title TLOSTreasureHunt - Educational Example of a TLOS-Protected Honeypot
 /// @author TLOS Team
 /// @notice A simplified treasure hunt contract demonstrating TLOS protection patterns
-/// @dev This is a TEACHING EXAMPLE. For production use, see TLOSWithPuzzleV3.sol
+/// @dev This is a TEACHING EXAMPLE. For production use, see TLOSWithPuzzleV4.sol
 ///
 /// ## How It Works
 ///

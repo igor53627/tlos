@@ -8,7 +8,7 @@ pragma solidity ^0.8.20;
 /// ============================================================================
 /// WARNING: DEMONSTRATION ONLY - NOT AUDITED FOR PRODUCTION USE
 /// ============================================================================
-/// For production deployments, use TLOSWithPuzzleV3.sol with full 4-layer security.
+/// For production deployments, use TLOSWithPuzzleV4.sol with full 4-layer security.
 /// This contract demonstrates the pattern with Layer 4 (planted LWE puzzle) only.
 ///
 /// ## Security Model (Section 4.1.2 - Wallet Recovery & Inheritance)

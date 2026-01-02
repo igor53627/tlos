@@ -47,7 +47,7 @@
 \maketitle
 
 \begin{abstract}
-We introduce \tlos{} (Topology-Lattice Obfuscation for Smart Contracts), a four-layer obfuscation architecture designed to protect sensitive logic on public ledgers. Unlike theoretical constructions of Indistinguishability Obfuscation (iO) that are too costly for deployment, \tlos{} relies on standard cryptographic assumptions adapted for the EVM. The framework integrates: (1)~heuristic topology mixing to defeat structural analysis, (2)~an on-chain LWE layer ($n{=}384$, $\sigma{=}8$) to hide control flow, (3)~full-rank linear wire binding to ensure trace integrity, and (4)~a planted ternary LWE puzzle that enforces a computational floor of $2^{76}$ operations per guess. Empirical evaluation confirms \tlos{} resists structural, statistical, and semantic attacks, offering a robust and gas-efficient (11 bytes/gate) solution for on-chain secrets.
+We introduce \tlos{} (Topology-Lattice Obfuscation for Smart Contracts), a four-layer obfuscation architecture designed to protect sensitive logic on public ledgers. Unlike theoretical constructions of Indistinguishability Obfuscation (iO) that are too costly for deployment, \tlos{} relies on standard cryptographic assumptions adapted for the EVM. The framework integrates: (1)~heuristic topology mixing to defeat structural analysis, (2)~an on-chain LWE layer ($n{=}384$, $\sigma{=}8$) to hide control flow, (3)~full-rank linear wire binding to ensure trace integrity, and (4)~a planted ternary LWE puzzle that enforces a $2^{76}$ computational floor before any input testing can begin. Empirical evaluation confirms \tlos{} resists structural, statistical, and semantic attacks, offering a robust and gas-efficient (11 bytes/gate) solution for on-chain secrets.
 \end{abstract}
 
 %------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ Smart contracts on public blockchains are fully transparent: anyone can read the
   \item \textbf{Identity:} ENS recovery codes, one-time delegation codes, multi-code access control
 \end{itemize}
 
-The core problem: EVM has no memory-hard KDF (Argon2/scrypt) as a precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess, making low-entropy secrets (human phrases, small ranges) trivially crackable offline. \tlos{} addresses this with two complementary mechanisms: (1)~standard LWE verification ($n{=}384$, $\sigma{=}8$) that slows each guess to $10^5$--$10^6$/second on GPU~\cite{GPUFalcon23,GPUHybrid25}, and (2)~a planted ternary puzzle (Layer~4) that enforces a $2^{76}$ computational floor \emph{regardless of input entropy}. This means even a 6-digit PIN gains $2^{76}$ protection, not just the $10^6$ combinations an attacker would expect.
+The core problem: EVM has no memory-hard KDF (Argon2/scrypt) as a precompile. Keccak256 can be brute-forced at ${\sim}1$ns/guess, making low-entropy secrets (human phrases, small ranges) trivially crackable offline. \tlos{} addresses this with two complementary mechanisms: (1)~standard LWE verification ($n{=}384$, $\sigma{=}8$) that slows each guess to $10^5$--$10^6$/second on GPU~\cite{GPUFalcon23,GPUHybrid25}, and (2)~a planted ternary puzzle (Layer~4) that enforces a $2^{76}$ computational floor \emph{before any input testing can begin}. The puzzle solution is derived from the secret, so honest solvers compute it directly while attackers must solve the ternary LWE problem. This means even a 6-digit PIN gains $2^{76}$ protection: the attacker must first solve the puzzle ($2^{76}$ work), then test inputs.
 
 Traditional circuit obfuscation aims for \emph{permanent} security: given the obfuscated circuit $\obf(C)$, no efficient adversary can ever extract useful information beyond input-output behavior. The best theoretical constructions achieve indistinguishability obfuscation (iO) from LWE~\cite{JLS21,GP21,CLW25}, but with overhead exceeding $10^6\times$; far too expensive for on-chain deployment.
 
@@ -82,7 +82,7 @@ We take a practical approach: \emph{resist known attack classes} through four co
   
   \item \textbf{Layer 3 (Wire Binding --- stops the hacker):} Full-rank linear hash binds wire values across gate evaluations, preventing mix-and-match attacks (see \S\ref{sec:wire-binding}). \emph{Security: algebraic binding via bijective map.}
   
-  \item \textbf{Layer 4 (Puzzle --- stops the GPU miner):} Forces minimum $3^{48} \approx 2^{76}$ brute-force search space regardless of input entropy. Puzzle verification costs 1.26M gas. \emph{Security: computational (ternary LWE).}
+  \item \textbf{Layer 4 (Puzzle --- stops the GPU miner):} Forces $3^{48} \approx 2^{76}$ \textbf{one-time} brute-force work before any input testing. Puzzle solution derived from secret (honest solver computes directly; attacker must solve LWE). Verification costs 1.26M gas. \emph{Security: computational (ternary LWE).}
 \end{enumerate}
 
 \textbf{Key mechanism:} Wrong-key decryption yields garbage; wire binding ensures consistent execution traces.
@@ -108,20 +108,20 @@ Topology-only defenses cannot block this attack because any structural transform
   \item Recovering the correct CFs without knowing the secret requires solving the LWE problem with $n{=}384$ and $\sigma{=}8$
 \end{itemize}
 
-\textbf{Important:} Attackers \emph{can} simulate the circuit offline; this is not a ``restricted oracle'' in the sense of blocking evaluation. The defense is that wrong-key evaluation yields \emph{meaningless} subcircuit semantics. The on-chain contract reinforces this by exposing only a 1-bit oracle (true/false), limiting information leakage per query.
+\textbf{Important:} Attackers \emph{can} simulate the circuit offline; this is not a ``restricted oracle'' in the sense of blocking evaluation. The defense is that wrong-key evaluation yields \emph{meaningless} subcircuit semantics. The standard on-chain interface exposes a 1-bit oracle (true/false) for honeypot verification, limiting information leakage per query. However, the protocol supports multi-bit payloads: the circuit can compute arbitrary functions on the secret input, with output wires revealing additional data upon correct decryption.
 
 \subsection{Contributions}
 
 \begin{enumerate}
-  \item \textbf{\tlos{} Framework:} A four-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain LWE with Gaussian noise ($\sigma{=}8$) inner products, a full-rank wire binding layer, and a planted LWE puzzle layer. Our implementation uses $n{=}384$ LWE dimension and a $64{\times}64$ binding matrix, achieving 1.8M--6M gas (3--10\% of block) and 11 bytes/gate storage (seed-derived $\vec{a}$ vectors) with 9/9 resistance in our attack evaluation matrix.
+  \item \textbf{\tlos{} Framework:} A four-layer obfuscation framework for EVM combining topology-based structural mixing, on-chain LWE with Gaussian noise ($\sigma{=}8$) inner products, a full-rank wire binding layer, and a planted LWE puzzle layer. Our implementation uses $n{=}384$ LWE dimension and a $64{\times}64$ binding matrix, achieving 1.8M--6M gas (3--10\% of block) and 11 bytes/gate storage (seed-derived $\vec{a}$ vectors) with 11/11 resistance in our attack evaluation matrix.
   
   \item \textbf{Structural Mixing:} Wire selection algorithm defeating structural and statistical attacks through non-pow2 distances, uniform wire usage, and irregular layers. Security is heuristic and empirically validated.
   
-  \item \textbf{Wrong-Key Garbage Property:} Attackers can simulate evaluation offline with any candidate input, but wrong keys yield garbage control function bits. The on-chain 1-bit oracle limits information leakage per query.
+  \item \textbf{Wrong-Key Garbage Property:} Attackers can simulate evaluation offline with any candidate input, but wrong keys yield garbage control function bits. The standard 1-bit oracle interface limits information leakage; multi-bit payloads are supported for applications requiring data reveal.
   
   \item \textbf{On-Chain LWE with Gaussian Noise:} Control functions hidden via standard LWE ciphertexts with Gaussian noise ($\sigma{=}8$) with full inner product computation on-chain. No hints or shortcuts; recovering control-function bits without the secret requires solving LWE.
   
-  \item \textbf{Planted LWE Puzzle:} Layer 4 forces minimum $3^{48} \approx 2^{76}$ brute-force search space via a ternary LWE puzzle with planted solution. Puzzle verification costs 1.26M gas (3--12\% overhead). This protects low-entropy inputs from GPU brute-force attacks.
+  \item \textbf{Planted LWE Puzzle:} Layer 4 forces $3^{48} \approx 2^{76}$ brute-force work before any input testing, via a ternary LWE puzzle. The planted solution is derived from the secret: $s^* = H(\text{``planted''} \| \mathit{secret})$, so honest solvers compute it directly while attackers must solve the LWE problem. Puzzle verification costs 1.26M gas.
   
   \item \textbf{Post-Quantum Resistance:} Security of control-function hiding relies on the hardness of standard LWE with Gaussian noise. Our ${\sim}2^{112}$ PQ estimate for $n{=}384$ with $\sigma{=}8$ is confirmed by the lattice estimator (see Table~\ref{tab:lwe-security}).
   
@@ -133,7 +133,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \textbf{What \tlos{} provides:}
 \begin{itemize}
   \item Computational security based on hardness of standard LWE with Gaussian noise ($\sigma{=}8$) (confirmed by the lattice estimator; see Table~\ref{tab:lwe-security} for complexity estimates) plus empirical heuristics (topology layer)
-  \item Attack resistance (9/9 in our evaluation matrix; not a universal security claim)
+  \item Attack resistance (11/11 in our evaluation matrix; not a universal security claim)
   \item Practical gas costs (1.8M--6M for $n{=}384$, 3--10\% of 60M block limit)
   \item Post-quantum resistance (${\sim}2^{112}$ security for $n{=}384$ with $\sigma{=}8$)
   \item Public evaluation: no secret keys required to evaluate the circuit on-chain
@@ -145,7 +145,7 @@ Topology-only defenses cannot block this attack because any structural transform
 \textbf{What \tlos{} does NOT provide:}
 \begin{itemize}
   \item Permanent indistinguishability obfuscation (iO); we do not claim that obfuscations of equivalent circuits are indistinguishable
-  \item Universal security against all possible attacks; we resist our 9-class taxonomy only
+  \item Universal security against all possible attacks; we resist our 11-class taxonomy only
   \item Forward secrecy for long-lived secrets (expired secrets may be analyzed retroactively)
   \item Protection against protocol logic bugs, economic/incentive attacks, or EVM-level side channels
   \item Security after LWE compromise: if an adversary recovers all control function bits (e.g., by breaking the underlying LWE instances), the circuit becomes a fully specified reversible circuit that can be inverted gate-by-gate in linear time. The topology layer offers no post-compromise security; it only increases the cost of \emph{pre-compromise} structural and statistical attacks
@@ -191,10 +191,20 @@ Under these constraints, \tlos{} provides a practical mechanism to make secret v
   \item \textbf{Dark limit orders:} Price bands and slippage tolerances are hidden. Even if bid/ask ranges are from a small domain (1000 discrete ticks), TLOS makes dictionary attacks prohibitively slow.
 \end{itemize}
 
+\textbf{Integration pattern: acting on hidden information.} A common question is how the protocol can act on hidden thresholds without revealing them. The answer relies on two properties:
+
+\begin{enumerate}
+  \item \textbf{Binary output:} The circuit outputs 1 (condition met) or 0 (not met). The contract triggers actions based on this bit, not the threshold value itself. An observer sees ``liquidation triggered at block $N$'' but not ``threshold was exactly 1500.''
+  
+  \item \textbf{One-shot secrets:} DeFi triggers are inherently single-use. Once a stop-loss executes, the threshold is ``spent''---post-trigger revelation is acceptable because the protected action already occurred. The attacker needed to know the threshold \emph{before} the trigger to front-run; learning it afterward provides no advantage.
+\end{enumerate}
+
+For range checks (e.g., \texttt{price >= threshold}), the circuit encodes a comparison function rather than equality. The exact threshold remains hidden even after triggering, since many threshold values would produce the same output for any given price.
+
 \subsubsection{Wallet Recovery \& Inheritance}
 
 \begin{itemize}
-  \item \textbf{Human-memorable recovery codes:} Smart wallets can use 6-word recovery phrases protected by TLOS. With keccak, a $10^6$-word dictionary is cracked in $<$1ms; with TLOS Layer 4 puzzle, the attacker must solve a $2^{76}$ ternary LWE puzzle \emph{per guess}, making even small dictionaries computationally infeasible.
+  \item \textbf{Human-memorable recovery codes:} Smart wallets can use 6-word recovery phrases protected by TLOS. With keccak, a $10^6$-word dictionary is cracked in $<$1ms; with TLOS Layer 4 puzzle, the attacker must first solve a $2^{76}$ ternary LWE puzzle before testing any inputs. The honest user (who knows the phrase) computes the puzzle solution directly from $H(\text{``planted''} \| \text{phrase})$.
   
   \item \textbf{On-chain wills:} Family passphrases unlock inheritance. The distribution structure (who gets what percentage) is hidden inside the circuit. Multiple heirs can have different secrets encoded.
   
@@ -206,7 +216,7 @@ Under these constraints, \tlos{} provides a practical mechanism to make secret v
 \begin{itemize}
   \item \textbf{On-chain puzzles:} Low-entropy riddle answers are protected by Layer 4's $2^{76}$ puzzle requirement. Honest human solvers compete fairly; automated mass-guessing becomes economically prohibitive (${\sim}\$1.5$B electricity for exhaustive search).
   
-  \item \textbf{Sealed-bid auctions:} Bids from small domains (0--10,000 price levels) cannot be dictionary-attacked. Each guess requires solving the Layer 4 puzzle ($2^{76}$ work).
+  \item \textbf{Sealed-bid auctions:} Bids from small domains (0--10,000 price levels) cannot be dictionary-attacked. Attacker must first solve the $2^{76}$ puzzle before testing any bid values.
   
   \item \textbf{Mystery box trait generation:} The algorithm mapping \texttt{(tokenId, entropy)} to traits is obfuscated. Minters cannot predict or steer for rare outcomes.
 \end{itemize}
@@ -216,7 +226,7 @@ Under these constraints, \tlos{} provides a practical mechanism to make secret v
 \begin{itemize}
   \item \textbf{ENS recovery:} High-value ENS names can be protected by human-memorable codes that would be trivially crackable with keccak.
   
-  \item \textbf{One-time delegation codes:} Short numeric codes (6 digits) grant temporary access. Layer 4 puzzle forces $2^{76}$ work per guess, making brute-force infeasible regardless of code entropy.
+  \item \textbf{One-time delegation codes:} Short numeric codes (6 digits) grant temporary access. Layer 4 puzzle forces $2^{76}$ work before any guessing, making brute-force infeasible regardless of code entropy.
   
   \item \textbf{Multi-code access:} OR of $N$ event codes with hidden structure; attackers don't know how many codes exist or their format.
 \end{itemize}
@@ -310,7 +320,7 @@ The self-inverse property enables commit-reveal protocols where the solver demon
   
   \item \textbf{Wire Binding Layer:} Full-rank $64{\times}64$ linear hash binds wire values across gates, preventing mix-and-match attacks. Updated every 128 gates for gas efficiency.
   
-  \item \textbf{Planted Puzzle Layer:} Ternary LWE puzzle ($n{=}48$) forces $2^{76}$ minimum brute-force work regardless of input entropy. Verification costs 1.26M gas.
+  \item \textbf{Planted Puzzle Layer:} A single ternary LWE puzzle ($n{=}48$) per contract that forces a \textbf{one-time} $2^{76}$ minimum brute-force work before any input testing. Verification costs 1.26M gas.
 \end{enumerate}
 
 \textbf{Deployment:} A single smart contract with:
@@ -366,9 +376,9 @@ We describe the protocol through three actors:
 
 \textbf{Composition rule:} For a point-function circuit on input space $\mathcal{X}$ with entropy $h$, the cost of finding a preimage is:
 \[
-\min\big(2^h,\ 2^{112},\ 2^{76}\big)
+2^{76} + \min\big(2^h,\ 2^{112}\big)
 \]
-where $2^h$ is brute-force over inputs, $2^{112}$ is LWE security, and $2^{76}$ is the puzzle's per-guess cost floor. Layers 1 (Topology) and 3 (Wire Binding) raise the bar against structural/mix-and-match \emph{shortcuts} but do not multiply the security level---they prevent attackers from bypassing the cryptographic layers.
+where $2^{76}$ is the one-time puzzle cost (must be paid before any input testing), $2^h$ is brute-force over inputs, and $2^{112}$ is LWE security. For low-entropy inputs ($h < 76$), the puzzle dominates; for high-entropy inputs, LWE dominates. The puzzle is instantiated once per contract; after it is solved, subsequent input guesses can be tested without re-solving the puzzle. Layers 1 (Topology) and 3 (Wire Binding) prevent structural/mix-and-match \emph{shortcuts}.
 
 \textbf{Out of scope:}
 \begin{itemize}
@@ -385,16 +395,16 @@ where $2^h$ is brute-force over inputs, $2^{112}$ is LWE security, and $2^{76}$ 
   \item Generate circuit $C$ that computes $C(x) = 1$ iff $x = \mathit{secret}$
   \item Apply topology layer: wire selection with non-pow2 distances, uniform usage
   \item Apply LWE layer: encode control functions as LWE ciphertexts with Gaussian noise ($\sigma{=}8$)
-  \item Generate puzzle: plant ternary secret $s^* \in \{-1,0,1\}^{48}$, derive $(A,b)$ where $b = As^* + e$
-  \item Deploy contract with circuit data (SSTORE2), puzzle parameters, expected output hash, and expiry timestamp
+  \item Generate puzzle: compute $s^* = H(\text{``planted''} \| \mathit{secret}) \to \{-1,0,1\}^{48}$, derive $(A,b)$ where $b = As^* + e$
+  \item Deploy contract with circuit data (SSTORE2), puzzle parameters $(A, b)$, expected output hash, and expiry timestamp
 \end{enumerate}
 
-\textbf{Solving (Bob):}
+\textbf{Solving (Bob, who knows secret):}
 \begin{enumerate}
-  \item Compute $H = \mathsf{hash}(\mathsf{sender} \| \mathsf{guess})$
+  \item Compute puzzle solution: $s^* = H(\text{``planted''} \| \mathit{secret}) \to \{-1,0,1\}^{48}$
+  \item Compute $H = \mathsf{hash}(\mathsf{sender} \| \mathsf{guess} \| s^*)$
   \item Call \texttt{commit(H)}
   \item Wait $k \geq 1$ blocks
-  \item Solve puzzle: find $s$ such that $\|As - b\|_\infty < \tau$ (off-chain computation)
   \item Call \texttt{reveal(guess, puzzleSolution)}
   \item If puzzle valid AND $C(\mathsf{guess}) = 1$, receive reward
 \end{enumerate}
@@ -404,7 +414,8 @@ where $2^h$ is brute-force over inputs, $2^{112}$ is LWE security, and $2^{76}$ 
   \item Analyze circuit structure (topology layer blocks structural attacks)
   \item Attempt subcircuit evaluation (LWE layer blocks; CFs hidden by LWE ciphertexts)
   \item Attempt mix-and-match (wire binding layer blocks; inconsistent traces rejected)
-  \item Resort to brute force (Layer 4 puzzle forces $2^{76}$ work per guess; even low-entropy inputs protected)
+  \item Solve puzzle: must find $s$ such that $\|As - b\| < \tau$; requires $2^{76}$ brute-force work
+  \item After solving puzzle, can test inputs against circuit (LWE layer still provides $2^{112}$ protection)
 \end{enumerate}
 
 %------------------------------------------------------------------------------
@@ -912,7 +923,7 @@ Verification gas & 1.26M \\
 \item \textbf{uSVP/BDD:} $2^{38}$--$2^{40}$ operations
 \item \textbf{Dual-hybrid:} $2^{40}$ operations
 \end{itemize}
-The puzzle is \emph{intentionally weak} against lattice attacks (${\sim}2^{33}$). Its purpose is not to resist cryptanalysis but to \emph{force minimum computational work per guess}---the $3^{48}$ ternary search space ensures attackers cannot shortcut via low-entropy inputs. Even with lattice attacks, exhausting $3^{48}$ candidates at $2^{33}$ work each gives total cost $2^{76+33} = 2^{109}$.
+The puzzle is \emph{intentionally weak} against full cryptanalysis (${\sim}2^{33}$ with Coded-BKW). Its purpose is to \emph{force minimum computational work before any input testing}---the $3^{48}$ ternary search space ensures attackers cannot shortcut via low-entropy inputs. The puzzle solution is derived from the secret ($s^* = H(\text{``planted''} \| \mathit{secret})$), so honest solvers compute it directly. Attackers must solve the ternary LWE problem via brute-force ($2^{76}$) or lattice attacks ($2^{33}$); either provides a substantial computational floor.
 
 \textbf{False positives:} The probability of a random ternary vector satisfying the threshold is $< 10^{-180}$, ensuring essentially unique solutions.
 
@@ -1256,13 +1267,13 @@ All & \texttt{reveal()} & varies & varies \\
 
 To prevent front-running:
 \begin{enumerate}
-  \item \textbf{Commit:} User submits $H = \mathsf{hash}(\mathsf{sender} \| \mathsf{guess})$
+  \item \textbf{Compute puzzle solution:} Honest solver computes $s^* = H(\text{``planted''} \| \mathsf{guess}) \to \{-1,0,1\}^{48}$
+  \item \textbf{Commit:} User submits $H = \mathsf{hash}(\mathsf{sender} \| \mathsf{guess} \| s^*)$
   \item \textbf{Wait:} $k \geq 1$ blocks
-  \item \textbf{Solve puzzle:} Find $s$ such that $\|As - b\|_\infty < \tau$ (off-chain)
   \item \textbf{Reveal:} User submits (guess, puzzleSolution); contract verifies $H$ matches AND puzzle valid
 \end{enumerate}
 
-Sender binding prevents reward theft: an attacker copying the reveal transaction computes $\mathsf{hash}(\mathsf{attacker} \| \mathsf{guess}) \neq H$. The puzzle adds $2^{76}$ minimum work per guess attempt.
+Sender binding prevents reward theft: an attacker copying the reveal transaction computes $\mathsf{hash}(\mathsf{attacker} \| \mathsf{guess} \| \mathsf{puzzleSolution}) \neq H$. The puzzle adds $2^{76}$ minimum work before any input testing (one-time cost, not per-guess).
 
 %------------------------------------------------------------------------------
 \section{Wire Binding: Inter-Gate Consistency}
@@ -1620,11 +1631,11 @@ Furthermore, the algebraic system is massively underdetermined: 384 unknowns in 
 
 \textbf{Clarification:} \tlos{} does \emph{not} rely on hiding the code. The full bytecode, circuit data, and obfuscation scheme are public (Kerckhoffs's principle). Security comes from:
 \begin{enumerate}
-  \item \textbf{Input-dependent key:} $s = H(\mathsf{input})$ means wrong inputs produce garbage evaluations.
+  \item \textbf{Input-dependent key:} $s = H(\mathsf{input} \| \mathsf{puzzleSolution})$ means wrong inputs produce garbage evaluations.
   \item \textbf{LWE hardness:} Recovering $\mu$ without $s$ requires solving LWE with Gaussian noise (${\sim}2^{112}$ security).
-  \item \textbf{Layer 4 puzzle:} Forces minimum $2^{76}$ work per guess regardless of input entropy.
+  \item \textbf{Layer 4 puzzle:} Forces $2^{76}$ work before any input testing (puzzle solution derived from secret; attacker must solve LWE).
 \end{enumerate}
-The slowdown is \emph{per-guess}, enforced by cryptographic structure, not code obfuscation.
+The slowdown is enforced by cryptographic structure, not code obfuscation.
 
 \subsection{``Static Ciphertext Attack: Use BDD on Public $(a, b)$ Pairs''}
 

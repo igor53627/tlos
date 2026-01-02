@@ -15,7 +15,7 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 ///
 ///   2. LWE DIMENSION: This example uses n=128 (LBLO_N constant) which provides
 ///      REDUCED security (~2^64) for gas efficiency. Production deployments
-///      should use n=384 (from TLOSWithPuzzleV3.sol) for ~2^112 PQ security.
+///      should use n=384 (from TLOSWithPuzzleV4.sol) for ~2^112 PQ security.
 ///
 ///   3. NO PUZZLE LAYER: This example omits Layer 4 (planted LWE puzzle).
 ///      Without it, low-entropy inputs can be brute-forced. Production should
@@ -35,7 +35,7 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 /// this mapping: deterministic and verifiable, but attackers cannot predict
 /// which inputs produce legendary traits.
 ///
-/// For production TLOS usage, see: contracts/TLOSWithPuzzleV3.sol
+/// For production TLOS usage, see: contracts/TLOSWithPuzzleV4.sol
 contract TLOSKitties is ERC721 {
     uint256 public constant Q = 65521;
     uint256 public constant LBLO_N = 128;

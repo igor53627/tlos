@@ -35,7 +35,7 @@ pragma solidity ^0.8.20;
 /// This example ONLY demonstrates the TLOS integration pattern for MEV-resistant
 /// stop-loss threshold hiding. For production DeFi, integrate with real DEXs.
 ///
-/// For production TLOS usage, see: contracts/TLOSWithPuzzleV3.sol
+/// For production TLOS usage, see: contracts/TLOSWithPuzzleV4.sol
 ///
 /// @notice Demonstrates hidden stop-loss triggers using TLOS obfuscation
 ///

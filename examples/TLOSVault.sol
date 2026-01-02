@@ -35,7 +35,7 @@ pragma solidity ^0.8.20;
 /// This example ONLY demonstrates the TLOS integration pattern for MEV-resistant
 /// liquidation threshold hiding. For production DeFi, see Aave/Compound patterns.
 ///
-/// For production TLOS usage, see: contracts/TLOSWithPuzzleV3.sol
+/// For production TLOS usage, see: contracts/TLOSWithPuzzleV4.sol
 ///
 /// @notice Demonstrates MEV-resistant liquidations using TLOS obfuscation
 ///
@@ -59,7 +59,7 @@ pragma solidity ^0.8.20;
 ///   4. Planted LWE puzzle: Forces minimum 2^76 brute-force search
 ///
 /// This example is simplified for demonstration - production deployments
-/// should use the full TLOSWithPuzzleV3 contract.
+/// should use the full TLOSWithPuzzleV4 contract.
 
 interface IOracle {
     function getPrice() external view returns (uint256);

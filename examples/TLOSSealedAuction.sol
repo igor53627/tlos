@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 /// @author TLOS Team
 /// @notice A sealed-bid auction where bids are protected from dictionary attacks via TLOS
 /// @dev ============================================================================
-///      DEMONSTRATION ONLY - For production use, see TLOSWithPuzzleV3.sol
+///      DEMONSTRATION ONLY - For production use, see TLOSWithPuzzleV4.sol
 ///      ============================================================================
 ///
 /// ## Problem: Dictionary Attacks on Sealed Bids
