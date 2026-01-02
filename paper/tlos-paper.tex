@@ -403,7 +403,8 @@ where $2^h$ is brute-force over inputs, $2^{112}$ is LWE security, and $2^{76}$ 
 \begin{enumerate}
   \item Analyze circuit structure (topology layer blocks structural attacks)
   \item Attempt subcircuit evaluation (LWE layer blocks; CFs hidden by LWE ciphertexts)
-  \item Resort to brute force ($2^{256}$ for 256-bit secrets; infeasible)
+  \item Attempt mix-and-match (wire binding layer blocks; inconsistent traces rejected)
+  \item Resort to brute force (Layer 4 puzzle forces $2^{76}$ work per guess; even low-entropy inputs protected)
 \end{enumerate}
 
 %------------------------------------------------------------------------------
