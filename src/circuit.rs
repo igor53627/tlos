@@ -1,6 +1,8 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+/// A reversible Toffoli-like gate with one active pin and two control pins.
+/// The active pin is XORed with a 4-bit truth table indexed by the control pins.
 #[derive(Clone, Debug)]
 pub struct Gate {
     pub pins: [u8; 3],
@@ -33,6 +35,8 @@ impl Gate {
     }
 }
 
+/// A circuit of reversible gates forming Layer 1 (Topology) of TLOS.
+/// Provides structural mixing through random gate application.
 #[derive(Clone, Debug)]
 pub struct Circuit {
     pub gates: Vec<Gate>,
@@ -68,6 +72,8 @@ impl Circuit {
     }
 }
 
+/// Configuration for generating a 6x6 (64-wire) obfuscation circuit.
+/// Default: 64 wires with 10 gates per wire (640 total gates).
 #[derive(Clone, Debug)]
 pub struct SixSixConfig {
     pub num_wires: usize,
@@ -98,6 +104,8 @@ impl SixSixConfig {
     }
 }
 
+/// Creates a deterministic circuit from the given configuration.
+/// Uses ChaCha20 PRNG seeded by `config.seed` for reproducibility.
 pub fn create_six_six_circuit(config: &SixSixConfig) -> Circuit {
     let mut rng = ChaCha20Rng::seed_from_u64(config.seed);
     let mut circuit = Circuit::new(config.num_wires);

@@ -1,5 +1,6 @@
 use sha3::{Digest, Keccak256};
 
+/// Initialize SEH accumulator (legacy, kept for compatibility).
 pub fn seh_init(input: &[u8; 32], wires: u64) -> [u8; 32] {
     let mut hasher = Keccak256::new();
     hasher.update(input);
@@ -11,6 +12,7 @@ pub fn seh_init(input: &[u8; 32], wires: u64) -> [u8; 32] {
     out
 }
 
+/// Update SEH accumulator with new batch state (legacy, kept for compatibility).
 pub fn seh_update(acc: [u8; 32], batch_end: u32, wires: u64) -> [u8; 32] {
     let mut hasher = Keccak256::new();
     hasher.update(&acc);

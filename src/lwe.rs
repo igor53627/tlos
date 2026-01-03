@@ -1,19 +1,38 @@
+//! Layer 2: LWE encryption for control function hiding.
+//!
+//! Uses standard LWE with Gaussian noise (n=384, q=65521, σ=8) providing
+//! ~2^112 post-quantum security against lattice attacks.
+
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 use sha3::{Digest, Keccak256};
 
 use crate::circuit::Gate;
 
+/// LWE modulus (largest prime < 2^16).
 pub const Q: u16 = 65521;
+
+/// LWE dimension (n=384 for ~2^112 PQ security).
 pub const LWE_N: usize = 384;
+
+/// Decryption threshold (q/4). Values below indicate bit=0, above indicate bit=1.
 pub const THRESHOLD: u16 = Q / 4;
+
+/// Gaussian noise standard deviation (σ=8).
 pub const NOISE_SIGMA: f64 = 8.0;
+
+/// Ciphertext size in bytes: n * 2 (for a vector) + 2 (for b scalar).
 pub const CT_SIZE: usize = LWE_N * 2 + 2;
+
+/// Encoded gate size: 3 bytes (indices) + 4 ciphertexts (truth table).
 pub const GATE_SIZE: usize = 3 + 4 * CT_SIZE;
 
+/// LWE ciphertext: a ∈ Z_q^n and b ∈ Z_q where b = ⟨a,s⟩ + e + m·(q/2).
 #[derive(Clone, Debug)]
 pub struct LweCiphertext {
+    /// Public vector a ∈ Z_q^n.
     pub a: [u16; LWE_N],
+    /// Ciphertext scalar b = ⟨a,s⟩ + e + m·(q/2) mod q.
     pub b: u16,
 }
 
@@ -35,6 +54,7 @@ const _: () = {
     assert!(CT_SIZE == LWE_N * 2 + 2);
 };
 
+/// Derives LWE secret s ∈ Z_q^n from a 32-byte seed using Keccak256.
 pub fn derive_secret(input: [u8; 32]) -> [u16; LWE_N] {
     let mut secret = [0u16; LWE_N];
     let num_chunks = (LWE_N + 15) / 16;
@@ -55,6 +75,9 @@ pub fn derive_secret(input: [u8; 32]) -> [u16; LWE_N] {
     secret
 }
 
+/// Encrypts a single bit using LWE: b = ⟨a,s⟩ + e + bit·(q/2) mod q.
+///
+/// Gaussian noise e ~ N(0, σ²) masks the message while preserving decryptability.
 pub fn encrypt_bit(
     bit: bool,
     a: &[u16; LWE_N],
@@ -78,6 +101,7 @@ pub fn encrypt_bit(
     LweCiphertext { a: *a, b }
 }
 
+/// Encodes a gate as 3 index bytes + 4 LWE ciphertexts (one per truth table bit).
 pub fn encode_gate(gate: &Gate, secret: &[u16; LWE_N], rng: &mut impl Rng) -> Vec<u8> {
     let mut data = Vec::with_capacity(GATE_SIZE);
     data.push(gate.active());

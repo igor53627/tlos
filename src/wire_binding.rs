@@ -1,6 +1,9 @@
 use sha3::{Digest, Keccak256};
 
+/// LWE modulus (largest 16-bit prime), shared with Layer 2.
 pub const Q: u32 = 65521;
+
+/// Number of rows in the wire binding matrix (64 wires).
 pub const BINDING_ROWS: usize = 64;
 
 /// Compute full-rank wire binding hash H(x) = A * x mod q where A is 64x64
@@ -10,10 +13,10 @@ pub const BINDING_ROWS: usize = 64;
 /// - `gate_idx`: gate index (0 for init, batchEnd for updates)
 /// - `num_wires`: 1..=64
 /// - `circuit_seed`: 32-byte seed matching Solidity `circuitSeed`
-/// - Returns: [U256; 4] packed as 64 x u16 (1024 bits total, 16 x 16-bit per U256)
+/// - Returns: `[U256; 4]` packed as 64 x u16 (1024 bits total, 16 x 16-bit per U256)
 ///
-/// Optimized: derives 16 coefficients per keccak (320 calls vs 4096)
-/// Note: We use [u128; 2] to represent each uint256 (low, high)
+/// Optimized: derives 16 coefficients per keccak (320 calls vs 4096).
+/// Note: We use `[u128; 2]` to represent each uint256 (low, high).
 pub fn wire_binding_hash(
     input_bits: u64,
     gate_idx: u32,
@@ -140,7 +143,7 @@ pub fn wire_binding_init(
 }
 
 /// Update wire binding accumulator after a batch of gates
-/// Mirrors Solidity: combined = bindingAcc[0] ^ bindingAcc[1] ^ bindingAcc[2] ^ bindingAcc[3] ^ wires
+/// Mirrors Solidity: `combined = bindingAcc[0] ^ bindingAcc[1] ^ bindingAcc[2] ^ bindingAcc[3] ^ wires`
 ///                   bindingAcc = _wireBindingHash(combined, batchEnd)
 pub fn wire_binding_update(
     acc: BindingOutput,

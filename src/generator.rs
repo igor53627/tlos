@@ -8,6 +8,7 @@ use crate::wire_binding::{wire_binding_init, wire_binding_update, BindingOutput}
 
 const BATCH_SIZE: u32 = 128;
 
+/// All data needed to deploy a TLOS contract on-chain.
 #[derive(Clone, Debug)]
 pub struct TLOSDeployment {
     pub circuit_data: Vec<u8>,
@@ -19,6 +20,7 @@ pub struct TLOSDeployment {
     pub expected_binding_output: BindingOutput,
 }
 
+/// Generates complete TLOS deployment data from a secret and seed.
 pub fn generate_tlos(secret: [u8; 32], circuit_seed: u64) -> TLOSDeployment {
     let config = SixSixConfig::new(circuit_seed);
     let circuit = create_six_six_circuit(&config);

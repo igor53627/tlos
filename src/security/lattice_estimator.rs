@@ -2,8 +2,14 @@ use std::path::Path;
 use std::process::Command;
 use thiserror::Error;
 
-/// Noise/secret distribution types for LWE security estimation.
-/// Matches the lattice-estimator-cli JSON format.
+/// LWE distribution types for security estimation.
+///
+/// These distributions describe the secret and error distributions used in LWE instances.
+/// The format matches lattice-estimator-cli JSON input, enabling automated security estimation.
+///
+/// Common configurations:
+/// - Main TLOS LWE: `UniformMod` secret, `DiscreteGaussian { stddev: 8.0 }` error
+/// - Puzzle LWE: `Ternary` secret, `Uniform { a: -2, b: 2 }` error
 #[derive(Clone, Debug)]
 pub enum Distribution {
     /// Discrete Gaussian with standard deviation σ and optional mean.
@@ -128,17 +134,24 @@ impl Distribution {
 }
 
 /// Errors from running the lattice-estimator-cli.
+///
+/// The CLI is a Python wrapper around the lattice-estimator library.
+/// These errors cover subprocess execution, output parsing, and CLI failures.
 #[derive(Debug, Error)]
 pub enum EstimatorCliError {
+    /// Failed to spawn or communicate with the CLI process.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// CLI output was not valid UTF-8.
     #[error("UTF-8 error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 
+    /// CLI exited with non-zero status (includes stdout/stderr for debugging).
     #[error("lattice-estimator-cli exited with code {0:?}. stdout: {1} stderr: {2}")]
     NonZeroExit(Option<i32>, String, String),
 
+    /// Failed to parse the security level from CLI output.
     #[error("parse int error: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
 }
