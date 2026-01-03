@@ -30,31 +30,24 @@ cd paper && pdflatex tlos.tex && pdflatex tlos.tex && pdflatex tlos-paper.tex &&
 ## Repository Structure
 
 - `contracts/` - Solidity contracts
-  - `TLOS.sol` - Main contract (Layers 1-3)
-  - `TLOSOptimized.sol` - Gas-optimized variant with configurable n
-  - `TLOSWithPuzzleV4.sol` - Full 4-layer with correct puzzle integration (PRODUCTION)
-  - `TLOSWithPuzzleV3.sol` - Deprecated: puzzle derivable from input (insecure)
-  - `TLOSWithPuzzleV2.sol` - Deprecated: uses n=128 LWE
-  - `WeakLWEPuzzleV7.sol` - Standalone puzzle (n=48, for testing)
-- `src/` - Rust implementation (ported from circuit-mixing-research)
-- `test/` - Foundry tests (215 tests)
+  - `TLOSWithPuzzleV4.sol` - Production: 4-layer TLOS (n=384, puzzle n=48)
+  - `WeakLWEPuzzleV7.sol` - Production puzzle (n=48, 2^76 security)
+  - `WeakLWEPuzzleV5.sol` - Testing puzzle (n=32, 2^51 security)
+  - `WeakLWEPuzzleV6.sol` - Testing puzzle (n=24, 2^38 security)
+- `src/` - Rust implementation
+  - `circuit.rs` - Layer 1: topology mixing
+  - `lwe.rs` - Layer 2: LWE encryption (n=384, σ=8)
+  - `wire_binding.rs` - Layer 3: algebraic binding
+  - `generator.rs` - Deployment data generation
+- `test/` - Foundry tests (168 tests)
   - `TLOSWithPuzzleV4.t.sol` - Production contract tests (61 tests)
   - `TLOSWithPuzzleV4Harness.sol` - Test harness for isolated layer testing
-  - `PuzzleVariants.t.sol` - All puzzle versions (18 tests)
+  - `PuzzleVariants.t.sol` - Puzzle versions V5/V6/V7 (12 tests)
 - `scripts/` - Benchmarks and attack scripts
   - `attacks/` - Attack scripts organized by layer
-    - `layer1-topology/` - SAT/oracle-guided attacks (Rust)
-    - `layer2-lwe/` - Lattice attacks (Python)
-    - `layer3-binding/` - Mix-and-match attacks (Python)
-    - `layer4-puzzle/` - Brute-force attacks (Python/GPU)
-    - `estimators/` - Security estimation tools
 - `docs/` - Documentation
   - `layers/` - Per-layer technical documentation
-    - `layer1-topology/` - Circuit mixing (heuristic, `src/circuit.rs`)
-    - `layer2-lwe/` - LWE encryption (~2^112 PQ, `src/lwe.rs`)
-    - `layer3-binding/` - Wire binding (algebraic, `src/wire_binding.rs`)
-    - `layer4-puzzle/` - Planted LWE puzzle (2^76, `WeakLWEPuzzleV7.sol`)
-- `examples/` - Usage examples
+- `examples/` - Demo contracts (educational only)
 - `paper/` - LaTeX papers
 
 ## Ethereum Block Gas Limit

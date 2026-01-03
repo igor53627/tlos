@@ -2,18 +2,14 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-// Note: WeakLWEPuzzle (V1) excluded - no getPlantedSecret function
-import "../contracts/WeakLWEPuzzleV2.sol";
-import "../contracts/WeakLWEPuzzleV4.sol";
 import "../contracts/WeakLWEPuzzleV5.sol";
 import "../contracts/WeakLWEPuzzleV6.sol";
 import "../contracts/WeakLWEPuzzleV7.sol";
 
-/// @title Puzzle Variants Comprehensive Test
-/// @notice Tests all puzzle versions for correctness and gas benchmarking
+/// @title Puzzle Variants Test
+/// @notice Tests puzzle versions V5, V6, V7 for correctness and gas benchmarking
+/// @dev V7 (n=48) is production, V5/V6 are for testing with lower security
 contract PuzzleVariantsTest is Test {
-    WeakLWEPuzzleV2 public puzzleV2;
-    WeakLWEPuzzleV4 public puzzleV4;
     WeakLWEPuzzleV5 public puzzleV5;
     WeakLWEPuzzleV6 public puzzleV6;
     WeakLWEPuzzleV7 public puzzleV7;
@@ -21,61 +17,9 @@ contract PuzzleVariantsTest is Test {
     bytes32 constant TEST_X = keccak256("test-puzzle-input");
     
     function setUp() public {
-        puzzleV2 = new WeakLWEPuzzleV2();
-        puzzleV4 = new WeakLWEPuzzleV4();
         puzzleV5 = new WeakLWEPuzzleV5();
         puzzleV6 = new WeakLWEPuzzleV6();
         puzzleV7 = new WeakLWEPuzzleV7();
-    }
-    
-    // Note: V1 (WeakLWEPuzzle) excluded - no getPlantedSecret function
-    // V1 parameters: n=48, m=64, q=2048, threshold=512
-    
-    // ========== V2 Tests (n=40, m=60, q=2039) ==========
-    
-    function test_V2_Parameters() public view {
-        assertEq(puzzleV2.N_WEAK(), 40);
-        assertEq(puzzleV2.M_WEAK(), 60);
-        assertEq(puzzleV2.Q_WEAK(), 2039);
-        assertEq(puzzleV2.THRESHOLD_SQ(), 300);
-    }
-    
-    function test_V2_PlantedSecretValid() public {
-        int8[40] memory secret = puzzleV2.getPlantedSecret(TEST_X);
-        _assertTernary40(secret);
-        
-        uint256 gasBefore = gasleft();
-        (bool valid,) = puzzleV2.verifyPuzzle(TEST_X, secret);
-        uint256 gasUsed = gasBefore - gasleft();
-        
-        assertTrue(valid, "V2: Planted secret should be valid");
-        emit log_named_uint("V2 (n=40, m=60) gas", gasUsed);
-    }
-    
-    function test_V2_RandomSecretInvalid() public view {
-        int8[40] memory randomSecret = _randomTernary40(2);
-        (bool valid,) = puzzleV2.verifyPuzzle(TEST_X, randomSecret);
-        assertFalse(valid, "V2: Random secret should be invalid");
-    }
-    
-    // ========== V4 Tests (n=40, m=60, q=2039) ==========
-    
-    function test_V4_Parameters() public view {
-        assertEq(puzzleV4.N_WEAK(), 40);
-        assertEq(puzzleV4.M_WEAK(), 60);
-        assertEq(puzzleV4.Q_WEAK(), 2039);
-    }
-    
-    function test_V4_PlantedSecretValid() public {
-        int8[40] memory secret = puzzleV4.getPlantedSecret(TEST_X);
-        _assertTernary40(secret);
-        
-        uint256 gasBefore = gasleft();
-        (bool valid,) = puzzleV4.verifyPuzzle(TEST_X, secret);
-        uint256 gasUsed = gasBefore - gasleft();
-        
-        assertTrue(valid, "V4: Planted secret should be valid");
-        emit log_named_uint("V4 (n=40, m=60) gas", gasUsed);
     }
     
     // ========== V5 Tests (n=32, m=48, q=2039) ==========
@@ -177,7 +121,7 @@ contract PuzzleVariantsTest is Test {
     function test_AllVersions_GasBenchmark() public {
         emit log("=== Puzzle Variants Gas Benchmark ===");
         
-        // V6
+        // V6 (n=24, ~2^38 security)
         {
             int8[24] memory s6 = puzzleV6.getPlantedSecret(TEST_X);
             uint256 g = gasleft();
@@ -185,7 +129,7 @@ contract PuzzleVariantsTest is Test {
             emit log_named_uint("V6 (n=24, 2^38 security) gas", g - gasleft());
         }
         
-        // V5
+        // V5 (n=32, ~2^51 security)
         {
             int8[32] memory s5 = puzzleV5.getPlantedSecret(TEST_X);
             uint256 g = gasleft();
@@ -193,40 +137,26 @@ contract PuzzleVariantsTest is Test {
             emit log_named_uint("V5 (n=32, 2^51 security) gas", g - gasleft());
         }
         
-        // V2/V4
-        {
-            int8[40] memory s2 = puzzleV2.getPlantedSecret(TEST_X);
-            uint256 g = gasleft();
-            puzzleV2.verifyPuzzle(TEST_X, s2);
-            emit log_named_uint("V2 (n=40, 2^63 security) gas", g - gasleft());
-        }
-        
-        // V7 (production)
+        // V7 (n=48, ~2^76 security) - PRODUCTION
         {
             int8[48] memory s7 = puzzleV7.getPlantedSecret(TEST_X);
             uint256 g = gasleft();
             puzzleV7.verifyPuzzle(TEST_X, s7);
             emit log_named_uint("V7 (n=48, 2^76 security) gas", g - gasleft());
         }
-        
-        // V1 excluded - no getPlantedSecret
     }
     
     function test_SecurityLevels() public pure {
-        // Document security levels
         // V6: 3^24 = 2^38.03
         // V5: 3^32 = 2^50.72
-        // V2/V4: 3^40 = 2^63.40
         // V7: 3^48 = 2^76.08
         
         uint256 v6_bits = 38;
         uint256 v5_bits = 51;
-        uint256 v2_bits = 63;
         uint256 v7_bits = 76;
         
         assert(v6_bits < v5_bits);
-        assert(v5_bits < v2_bits);
-        assert(v2_bits < v7_bits);
+        assert(v5_bits < v7_bits);
     }
     
     // ========== Helper Functions ==========
@@ -239,12 +169,6 @@ contract PuzzleVariantsTest is Test {
     
     function _assertTernary32(int8[32] memory s) internal pure {
         for (uint256 i = 0; i < 32; i++) {
-            require(s[i] >= -1 && s[i] <= 1, "Not ternary");
-        }
-    }
-    
-    function _assertTernary40(int8[40] memory s) internal pure {
-        for (uint256 i = 0; i < 40; i++) {
             require(s[i] >= -1 && s[i] <= 1, "Not ternary");
         }
     }
@@ -263,12 +187,6 @@ contract PuzzleVariantsTest is Test {
     
     function _randomTernary32(uint256 seed) internal pure returns (int8[32] memory s) {
         for (uint256 i = 0; i < 32; i++) {
-            s[i] = int8(int256(uint256(keccak256(abi.encodePacked(seed, i))) % 3) - 1);
-        }
-    }
-    
-    function _randomTernary40(uint256 seed) internal pure returns (int8[40] memory s) {
-        for (uint256 i = 0; i < 40; i++) {
             s[i] = int8(int256(uint256(keccak256(abi.encodePacked(seed, i))) % 3) - 1);
         }
     }

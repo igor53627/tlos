@@ -7,12 +7,10 @@
   "frameworks": ["Foundry", "Cargo"],
   "architecture": {
     "contracts": {
-      "TLOS": "Main contract with Binary-Error LWE + wire binding (Layers 1-3)",
-      "TLOSOptimized": "Gas-optimized variant with configurable n (128/256/512/768)",
-      "TLOSWithPuzzleV4": "Full 4-layer integration with planted LWE puzzle (PRODUCTION)",
-      "WeakLWEPuzzleV7": "Standalone puzzle contract (n=48, m=72, production)",
-      "WeakLWEPuzzleV5": "Reduced puzzle variant (n=32, m=48)",
-      "TLOSKeccak": "Legacy classical-only variant (deprecated)"
+      "TLOSWithPuzzleV4": "Production: 4-layer TLOS (n=384, puzzle n=48)",
+      "WeakLWEPuzzleV7": "Production puzzle (n=48, m=72, 2^76 security)",
+      "WeakLWEPuzzleV5": "Testing puzzle (n=32, m=48, 2^51 security)",
+      "WeakLWEPuzzleV6": "Testing puzzle (n=24, m=36, 2^38 security)"
     },
     "rust": {
       "circuit": "Circuit/gate structures (Layer 1)",
@@ -102,8 +100,8 @@
   "status": "active",
   "lastUpdated": "2026-01-03",
   "testCoverage": {
-    "total": 215,
+    "total": 168,
     "TLOSWithPuzzleV4": 61,
-    "PuzzleVariants": 18
+    "PuzzleVariants": 12
   }
 }

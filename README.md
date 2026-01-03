@@ -175,13 +175,12 @@ forge script scripts/BenchmarkTLOS.s.sol --rpc-url "$TENDERLY_RPC" --broadcast -
 ```
 tlos/
 ├── contracts/
-│   ├── TLOS.sol              # Main contract (LWE + wire binding)
-│   ├── TLOSWithPuzzleV4.sol  # TLOS + Layer 4 planted LWE puzzle (PRODUCTION)
-│   ├── WeakLWEPuzzleV7.sol   # Standalone puzzle (n=48, production)
-│   ├── WeakLWEPuzzleV5.sol   # Puzzle variant (n=32, reduced)
-│   ├── interfaces/
-│   └── legacy/
-│       └── TLOSKeccak.sol    # Classical only, deprecated
+│   ├── TLOSWithPuzzleV4.sol  # Production: 4-layer TLOS (n=384, puzzle n=48)
+│   ├── WeakLWEPuzzleV7.sol   # Production puzzle (n=48, 2^76 security)
+│   ├── WeakLWEPuzzleV5.sol   # Testing puzzle (n=32, 2^51 security)
+│   ├── WeakLWEPuzzleV6.sol   # Testing puzzle (n=24, 2^38 security)
+│   └── interfaces/
+│       └── IHoneypot.sol     # Commit-reveal interface
 ├── src/                       # Rust implementation
 │   ├── circuit.rs            # Circuit/gate structures (Layer 1)
 │   ├── lwe.rs                # LWE encoding (Layer 2, Gaussian noise, σ=8)
@@ -191,11 +190,11 @@ tlos/
 │   │   └── lattice_estimator.rs  # lattice-estimator CLI wrapper
 │   └── bin/
 │       └── generate_tlos.rs  # CLI binary
-├── test/                      # Foundry tests (215 tests)
+├── test/                      # Foundry tests (168 tests)
 │   ├── TLOSWithPuzzleV4.t.sol    # Production contract tests (61 tests)
 │   ├── TLOSWithPuzzleV4Harness.sol  # Test harness for isolated testing
-│   ├── PuzzleVariants.t.sol      # All puzzle versions (18 tests)
-│   └── *.t.sol               # Additional test suites
+│   ├── PuzzleVariants.t.sol      # Puzzle versions V5/V6/V7 (12 tests)
+│   └── *.t.sol               # Example contract tests
 ├── scripts/
 │   ├── BenchmarkTLOS.s.sol   # Tenderly benchmark
 │   └── attacks/              # Attack scripts organized by layer
@@ -248,7 +247,7 @@ The `examples/` directory contains demonstration contracts showing TLOS integrat
 
 ## Testing
 
-TLOS has comprehensive test coverage with 215 tests across all layers:
+TLOS has comprehensive test coverage with 168 tests across all layers:
 
 ```bash
 # Run all tests
@@ -263,7 +262,7 @@ forge test --match-path test/TLOSWithPuzzleV4.t.sol
 
 **Key test files:**
 - `test/TLOSWithPuzzleV4.t.sol` - 61 tests for the production contract (deployment, puzzle, wire binding, cross-layer, commit-reveal, gas benchmarks)
-- `test/PuzzleVariants.t.sol` - 18 tests comparing all puzzle versions (V2, V4, V5, V6, V7)
+- `test/PuzzleVariants.t.sol` - 12 tests comparing puzzle versions (V5, V6, V7)
 - `test/TLOSWithPuzzleV4Harness.sol` - Exposes internal functions for isolated layer testing
 
 ## Security Disclaimer

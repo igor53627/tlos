@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_six_six_circuit"],"struct":["Circuit","Gate","SixSixConfig"]};

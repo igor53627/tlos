@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BINDING_ROWS","Q"],"fn":["wire_binding_hash","wire_binding_init","wire_binding_update"],"struct":["BindingOutput"]};

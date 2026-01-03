@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CT_SIZE","GATE_SIZE","LWE_N","NOISE_SIGMA","Q","THRESHOLD"],"fn":["derive_secret","encode_gate","encrypt_bit"],"struct":["LweCiphertext"]};
