@@ -5,42 +5,42 @@ The style file: abbrv.bst
 Database file #1: refs.bib
 You've used 18 entries,
             2118 wiz_defined-function locations,
-            598 strings with 6108 characters,
-and the built_in function-call counts, 5140 in all, are:
-= -- 463
+            596 strings with 6129 characters,
+and the built_in function-call counts, 4930 in all, are:
+= -- 439
 > -- 269
-< -- 1
+< -- 0
 + -- 106
 - -- 88
-* -- 277
-:= -- 865
+* -- 262
+:= -- 845
 add.period$ -- 56
 call.type$ -- 18
-change.case$ -- 96
+change.case$ -- 95
 chr.to.int$ -- 0
 cite$ -- 18
-duplicate$ -- 198
-empty$ -- 459
+duplicate$ -- 182
+empty$ -- 440
 format.name$ -- 88
-if$ -- 1093
+if$ -- 1040
 int.to.chr$ -- 0
 int.to.str$ -- 18
-missing$ -- 10
+missing$ -- 9
 newline$ -- 95
 num.names$ -- 36
-pop$ -- 157
+pop$ -- 158
 preamble$ -- 1
-purify$ -- 78
+purify$ -- 77
 quote$ -- 0
-skip$ -- 145
+skip$ -- 132
 stack$ -- 0
-substring$ -- 147
-swap$ -- 35
-text.length$ -- 1
+substring$ -- 115
+swap$ -- 25
+text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
 type$ -- 72
 warning$ -- 0
-while$ -- 41
+while$ -- 38
 width$ -- 20
-write$ -- 189
+write$ -- 188

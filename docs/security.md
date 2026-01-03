@@ -9,7 +9,7 @@ TLOS is a **compute-and-compare (point-function) obfuscator** using a four-layer
 3. **Wire binding layer** - full-rank linear hash for inter-gate consistency (algebraic binding)
 4. **Planted LWE puzzle** - forces minimum 3^48 ≈ 2^76 brute-force search space (1.26M gas)
 
-**What TLOS is:** Expensive-per-guess secret verification for low-entropy secrets with optional multi-bit payloads.
+**What TLOS is:** Secret verification with 2^76 one-time puzzle barrier for low-entropy secrets, plus optional multi-bit payloads.
 
 **What TLOS is NOT:** General circuit obfuscation or complex predicates on public data.
 
@@ -138,12 +138,18 @@ Layer 4 forces minimum brute-force work regardless of input entropy. Without thi
 | GH200 | 436M guesses/sec | ~5.7 million years |
 | 10,000 GPUs | 4.36T guesses/sec | ~570 years |
 
-### How It Works
+### How It Works (V4 Design)
 
-1. For each input `x`, a puzzle `(A, b)` is deterministically derived
-2. Solver must find ternary secret `s ∈ {-1,0,1}^48` satisfying `||As - b||² < threshold`
-3. The puzzle has a planted solution `s*` that only the deployer knows
-4. Puzzle solution hash is combined with input to derive TLOS secret: `s_tlos = H(input || H(puzzle_solution))`
+1. At deployment, Alice:
+   - Computes `plantedSecret = H("planted", secret)` → ternary {-1,0,1}^48
+   - Generates puzzle matrix A from random `puzzleSeed`
+   - Computes `b = A * plantedSecret + e` (small noise e)
+   - Stores `(puzzleSeed, b)` in contract - NOT plantedSecret
+2. Solver (Bob, who knows secret) computes `plantedSecret = H("planted", secret)` directly
+3. Attacker (doesn't know secret) must solve ternary LWE: given (A, b), find s ∈ {-1,0,1}^48
+4. Puzzle solution hash is combined with input to derive TLOS key: `s_tlos = H(input || H(puzzle_solution))`
+
+**Key insight:** The puzzle is ONE per contract. After solving (2^76 work), attacker can test all inputs. But this still provides 2^76 minimum work floor regardless of input entropy.
 
 ### Integration with TLOS
 
@@ -242,7 +248,7 @@ The four-layer security model:
 ### Security Level
 
 The overall system security is determined by the weakest component:
-- **~2^76 minimum** from Layer 4 puzzle (forces minimum work per guess)
+- **~2^76 minimum** from Layer 4 puzzle (one-time cost before any input testing)
 - **~2^112 post-quantum** from LWE layer (with n=384, σ=8 parameters)
 
 For low-entropy inputs, Layer 4 dominates: even a 1-bit secret requires 2^76 work to crack.

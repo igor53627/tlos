@@ -1,5 +1,7 @@
 # TLOS: Topology-Lattice Obfuscation for Smart Contracts
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/igor53627/tlos)
+
 **Four-layer obfuscation with planted LWE puzzle for minimum brute-force resistance.**
 
 TLOS is a practical circuit obfuscation framework for EVM. It uses standard LWE with Gaussian noise (σ=8, n=384) for control function hiding, full-rank linear hashing for wire binding, and a planted LWE puzzle to force minimum 2^76 brute-force search space. Security is based on standard LWE hardness (~2^112 PQ).
@@ -23,7 +25,7 @@ The wire binding construction is *inspired by* [Ma-Dai-Shi 2025](https://eprint.
 | **L**attice (LWE) | Control function hiding via LWE with Gaussian noise (σ=8) | ~2^112 PQ (n=384) |
 | **O**bfuscation | Circuit representation hiding | Heuristic |
 | Wire **B**inding | Inter-gate wire consistency via full-rank linear hash | Algebraic binding |
-| **P**uzzle | Minimum brute-force work per guess | Computational (~2^76) |
+| **P**uzzle | One-time brute-force barrier before input testing | Computational (~2^76) |
 
 ### Architecture
 
@@ -174,26 +176,40 @@ forge script scripts/BenchmarkTLOS.s.sol --rpc-url "$TENDERLY_RPC" --broadcast -
 tlos/
 ├── contracts/
 │   ├── TLOS.sol              # Main contract (LWE + wire binding)
-│   ├── TLOSWithPuzzleV2.sol  # TLOS + Layer 4 planted LWE puzzle
+│   ├── TLOSWithPuzzleV4.sol  # TLOS + Layer 4 planted LWE puzzle (PRODUCTION)
 │   ├── WeakLWEPuzzleV7.sol   # Standalone puzzle (n=48, production)
 │   ├── WeakLWEPuzzleV5.sol   # Puzzle variant (n=32, reduced)
 │   ├── interfaces/
 │   └── legacy/
 │       └── TLOSKeccak.sol    # Classical only, deprecated
 ├── src/                       # Rust implementation
-│   ├── circuit.rs            # Circuit/gate structures
-│   ├── lwe.rs                # LWE encoding (Gaussian noise, σ=8)
-│   ├── wire_binding.rs       # Wire binding implementation
+│   ├── circuit.rs            # Circuit/gate structures (Layer 1)
+│   ├── lwe.rs                # LWE encoding (Layer 2, Gaussian noise, σ=8)
+│   ├── wire_binding.rs       # Wire binding implementation (Layer 3)
 │   ├── generator.rs          # Deployment generator
 │   ├── security/             # Security estimation
 │   │   └── lattice_estimator.rs  # lattice-estimator CLI wrapper
 │   └── bin/
 │       └── generate_tlos.rs  # CLI binary
+├── test/                      # Foundry tests (215 tests)
+│   ├── TLOSWithPuzzleV4.t.sol    # Production contract tests (61 tests)
+│   ├── TLOSWithPuzzleV4Harness.sol  # Test harness for isolated testing
+│   ├── PuzzleVariants.t.sol      # All puzzle versions (18 tests)
+│   └── *.t.sol               # Additional test suites
 ├── scripts/
 │   ├── BenchmarkTLOS.s.sol   # Tenderly benchmark
-│   ├── tlos_attack.py        # LWE attack analysis scripts
-│   └── lwe_puzzle_solver_v5.py # Off-chain puzzle solver
+│   └── attacks/              # Attack scripts organized by layer
+│       ├── layer1-topology/  # SAT/oracle-guided attacks (Rust)
+│       ├── layer2-lwe/       # Lattice attacks (Python)
+│       ├── layer3-binding/   # Mix-and-match attacks (Python)
+│       ├── layer4-puzzle/    # Brute-force attacks (Python/GPU)
+│       └── estimators/       # Security estimation tools
 ├── docs/
+│   ├── layers/               # Per-layer technical documentation
+│   │   ├── layer1-topology/  # Circuit mixing (heuristic)
+│   │   ├── layer2-lwe/       # LWE encryption (~2^112 PQ)
+│   │   ├── layer3-binding/   # Wire binding (algebraic)
+│   │   └── layer4-puzzle/    # Planted LWE puzzle (2^76)
 │   ├── security.md           # Security model
 │   └── wire-binding.md       # Wire binding details
 ├── paper/
@@ -215,7 +231,7 @@ The `examples/` directory contains demonstration contracts showing TLOS integrat
 
 | Example | Use Case | Layers Used | LWE n | Puzzle | Production Ready |
 |---------|----------|-------------|-------|--------|------------------|
-| TLOSWithPuzzleV3 | **Production** | 1-4 (all) | 384 | Yes | [OK] |
+| TLOSWithPuzzleV4 | **Production** | 1-4 (all) | 384 | Yes | [OK] |
 | TLOSVault | DeFi liquidation | 2 (LWE only) | - | No | [X] Economically broken |
 | TLOSKitties | NFT traits | 2 (LWE only) | 128 | No | [X] Reduced security |
 | TLOSRecovery | Wallet recovery | 4 (puzzle) | - | Yes | [X] Needs phrase entropy |
@@ -230,6 +246,26 @@ The `examples/` directory contains demonstration contracts showing TLOS integrat
 - Layer 3: Wire binding (algebraic)
 - Layer 4: Planted LWE puzzle (2^76 minimum search space)
 
+## Testing
+
+TLOS has comprehensive test coverage with 215 tests across all layers:
+
+```bash
+# Run all tests
+forge test
+
+# Run with gas reporting
+forge test --gas-report
+
+# Run specific test file
+forge test --match-path test/TLOSWithPuzzleV4.t.sol
+```
+
+**Key test files:**
+- `test/TLOSWithPuzzleV4.t.sol` - 61 tests for the production contract (deployment, puzzle, wire binding, cross-layer, commit-reveal, gas benchmarks)
+- `test/PuzzleVariants.t.sol` - 18 tests comparing all puzzle versions (V2, V4, V5, V6, V7)
+- `test/TLOSWithPuzzleV4Harness.sol` - Exposes internal functions for isolated layer testing
+
 ## Security Disclaimer
 
 TLOS security is based on the **standard LWE problem with Gaussian noise** and the **planted LWE puzzle**.
@@ -238,7 +274,7 @@ TLOS security is based on the **standard LWE problem with Gaussian noise** and t
 - Layer 4 puzzle provides **minimum 2^76 search space** regardless of input entropy
 - GPU brute-force benchmark: ~2M guesses/sec on RTX 4090 (exhaustive search: ~1.2 billion years)
 - We encourage **independent cryptanalysis**
-- Attack scripts available in `scripts/tlos_attack.py` and `scripts/lwe_puzzle_solver_v5.py`
+- Attack scripts organized by layer in `scripts/attacks/` - see `scripts/attacks/README.md`
 - **Do not use for high-value, long-lived secrets** until further analysis is available
 
 ## Development Dependencies

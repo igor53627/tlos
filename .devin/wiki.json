@@ -1,7 +1,7 @@
 {
   "name": "TLOS",
   "description": "Four-layer post-quantum obfuscation: TLO + wire binding + planted LWE puzzle",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "repository": "https://github.com/igor53627/tlos",
   "language": ["Solidity", "Rust", "Python"],
   "frameworks": ["Foundry", "Cargo"],
@@ -9,23 +9,44 @@
     "contracts": {
       "TLOS": "Main contract with Binary-Error LWE + wire binding (Layers 1-3)",
       "TLOSOptimized": "Gas-optimized variant with configurable n (128/256/512/768)",
-      "TLOSWithPuzzleV2": "Full 4-layer integration with planted LWE puzzle (n=48)",
+      "TLOSWithPuzzleV4": "Full 4-layer integration with planted LWE puzzle (PRODUCTION)",
       "WeakLWEPuzzleV7": "Standalone puzzle contract (n=48, m=72, production)",
       "WeakLWEPuzzleV5": "Reduced puzzle variant (n=32, m=48)",
       "TLOSKeccak": "Legacy classical-only variant (deprecated)"
     },
     "rust": {
-      "generator": "Generates deployment data for TLOS contracts",
-      "seh_lwe": "LWE-based SEH implementation matching Solidity"
+      "circuit": "Circuit/gate structures (Layer 1)",
+      "lwe": "LWE encoding with Gaussian noise (Layer 2)",
+      "wire_binding": "Wire binding implementation (Layer 3)",
+      "generator": "Generates deployment data for TLOS contracts"
+    },
+    "tests": {
+      "TLOSWithPuzzleV4.t.sol": "Production contract tests (61 tests)",
+      "TLOSWithPuzzleV4Harness.sol": "Test harness for isolated layer testing",
+      "PuzzleVariants.t.sol": "All puzzle versions comparison (18 tests)"
     },
     "scripts": {
-      "lwe_puzzle_solver_v5": "Off-chain puzzle solver with pycryptodome"
+      "attacks": {
+        "layer1-topology": "SAT/oracle-guided attacks (Rust)",
+        "layer2-lwe": "Lattice attacks (Python)",
+        "layer3-binding": "Mix-and-match attacks (Python)",
+        "layer4-puzzle": "Brute-force attacks (Python/GPU)",
+        "estimators": "Security estimation tools"
+      }
+    },
+    "docs": {
+      "layers": {
+        "layer1-topology": "Circuit mixing (heuristic, src/circuit.rs)",
+        "layer2-lwe": "LWE encryption (~2^112 PQ, src/lwe.rs)",
+        "layer3-binding": "Wire binding (algebraic, src/wire_binding.rs)",
+        "layer4-puzzle": "Planted LWE puzzle (2^76, WeakLWEPuzzleV7.sol)"
+      }
     }
   },
   "parameters": {
-    "lwe_dimension": 768,
-    "pq_security_bits": "120-140",
-    "classical_security_bits": 250,
+    "lwe_dimension": 384,
+    "pq_security_bits": "~2^112",
+    "gaussian_noise_sigma": 8,
     "seh_matrix_size": "64x64",
     "q": 65521,
     "batch_size": 128,
@@ -40,18 +61,18 @@
     }
   },
   "gas": {
-    "TLOSLWE_64_gates": "~10.5M",
-    "TLOSLWE_128_gates": "~19.3M",
-    "TLOSLWE_256_gates": "~38.1M",
+    "conservative_64_gates": "~3.1M (1.8M circuit + 1.26M puzzle)",
+    "balanced_128_gates": "~3.3M (2.0M circuit + 1.26M puzzle)",
+    "full_security_256_gates": "~4.3M (3.0M circuit + 1.26M puzzle)",
     "puzzle_verification": "~1.26M",
-    "block_percentage": "17-66%"
+    "block_percentage": "5-7%"
   },
   "security": {
     "layers": [
       {"name": "Topology", "type": "heuristic", "security": "empirical"},
-      {"name": "Binary-Error LWE", "type": "computational", "security": "~2^120-140 PQ"},
+      {"name": "LWE (Gaussian noise)", "type": "computational", "security": "~2^112 PQ (n=384, σ=8)"},
       {"name": "Wire Binding", "type": "algebraic", "security": "bijective binding"},
-      {"name": "Planted LWE Puzzle", "type": "computational", "security": "~2^76 minimum"}
+      {"name": "Planted LWE Puzzle", "type": "computational", "security": "~2^76 minimum (n=48, ternary)"}
     ],
     "gpu_benchmark": {
       "device": "GH200",
@@ -79,5 +100,10 @@
     }
   ],
   "status": "active",
-  "lastUpdated": "2026-01-01"
+  "lastUpdated": "2026-01-03",
+  "testCoverage": {
+    "total": 215,
+    "TLOSWithPuzzleV4": 61,
+    "PuzzleVariants": 18
+  }
 }

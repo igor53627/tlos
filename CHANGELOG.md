@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-01-03
+
+### Added
+- **Comprehensive test coverage** for TLOSWithPuzzleV4 (issue #41)
+  - `test/TLOSWithPuzzleV4.t.sol`: 61 tests covering deployment, puzzle, wire binding, cross-layer, commit-reveal, gas
+  - `test/TLOSWithPuzzleV4Harness.sol`: Test harness exposing internal functions for isolated layer testing
+  - `test/PuzzleVariants.t.sol`: 18 tests comparing all puzzle versions (V2, V4, V5, V6, V7)
+- **Per-layer technical documentation** in `docs/layers/`
+  - `docs/layers/README.md`: 4-layer security model overview
+  - `docs/layers/layer1-topology/`: Circuit mixing (heuristic, `src/circuit.rs`)
+  - `docs/layers/layer2-lwe/`: LWE encryption (~2^112 PQ, `src/lwe.rs`)
+  - `docs/layers/layer3-binding/`: Wire binding (algebraic integrity, `src/wire_binding.rs`)
+  - `docs/layers/layer4-puzzle/`: Planted LWE puzzle (2^76 brute-force, `WeakLWEPuzzleV7.sol`)
+- **Attack scripts reorganized by layer** in `scripts/attacks/`
+  - `scripts/attacks/layer1-topology/`: SAT/oracle-guided attacks (copied from circuit-mixing-research)
+  - `scripts/attacks/layer2-lwe/`: Lattice attacks (existing, moved)
+  - `scripts/attacks/layer3-binding/`: Mix-and-match attack (`mix_and_match_attack.py`)
+  - `scripts/attacks/layer4-puzzle/`: Brute-force attacks (existing, moved)
+  - `scripts/attacks/estimators/`: Security analysis tools (existing, moved)
+  - `scripts/attacks/README.md`: Index of all attack scripts with key results
+
+### Fixed
+- Test assertion in `test_Puzzle_ValidSolutionAccepted` (was passing without verification)
+- Revert expectation in `test_Blockhash_DelayEnforced` (wrong error at commitBlock+2)
+
+### Documentation
+- README.md: Added DeepWiki badge, Testing section, updated repository structure
+- AGENTS.md: Added docs/layers/ and scripts/attacks/ structure reference
+
+## [0.5.1] - 2026-01-02
+
+### Fixed
+- **CRITICAL: Layer 4 puzzle integration vulnerability** - V3 had `getPlantedSecret(x)` that allowed anyone to compute puzzle solution for any input, bypassing 2^76 security entirely
+- TLOSWithPuzzleV4.sol: Correct puzzle design where planted secret is derived from SECRET, not input
+  - `plantedSecret = H("planted" || secret)` computed by deployer
+  - `(puzzleSeed, b)` stored in contract, NOT the planted secret
+  - Attacker must solve ternary LWE (2^76 work) to find solution
+  - Honest solver computes plantedSecret directly from secret
+
+### Changed
+- TLOSWithPuzzleV3 marked as deprecated (insecure - puzzle derivable from input)
+- TLOSWithPuzzleV2 marked as deprecated (uses n=128 LWE)
+- Paper updated: puzzle is ONE per contract (one-time 2^76 cost), not per-guess
+- Composition rule corrected: 2^76 + min(2^h, 2^112)
+
+### Security
+- V4 provides correct layer integration: puzzle must be solved BEFORE any input testing
+- After solving (2^76 work), attacker can test inputs but still faces LWE layer (2^112)
+
 ## [0.5.0] - 2026-01-01
 
 ### Added

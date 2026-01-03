@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""
+Simple CLI wrapper for malb/lattice-estimator.
+
+Usage:
+    lattice-estimator-cli <n> <q> --s-dist <json> --e-dist <json> [--m <samples>] [--exact]
+
+Example:
+    lattice-estimator-cli 384 65521 \
+        --s-dist '{"distribution":"uniform_mod"}' \
+        --e-dist '{"distribution":"discrete_gaussian","stddev":8.0}' \
+        --m 2560
+
+Outputs the estimated security level in bits (integer) on the last line.
+
+Requires: SageMath with malb/lattice-estimator installed:
+    git clone https://github.com/malb/lattice-estimator estimator
+    export PYTHONPATH="$PYTHONPATH:$(pwd)/estimator"
+"""
+
+import argparse
+import json
+import sys
+
+try:
+    from estimator import LWE, ND
+except ImportError:
+    print("Error: lattice-estimator not found. Install with:", file=sys.stderr)
+    print("  git clone https://github.com/malb/lattice-estimator estimator", file=sys.stderr)
+    print("  export PYTHONPATH=\"$PYTHONPATH:$(pwd)/estimator\"", file=sys.stderr)
+    sys.exit(1)
+
+
+def parse_distribution(spec: dict, q: int):
+    """Convert JSON distribution spec to ND object."""
+    dist_type = spec.get("distribution", "").lower().replace("_", "")
+    n = spec.get("n")
+
+    if dist_type == "discretegaussian":
+        stddev = spec["stddev"]
+        mean = spec.get("mean", 0)
+        return ND.DiscreteGaussian(stddev, mean=mean, n=n)
+
+    elif dist_type == "discretegaussianalpha":
+        alpha = spec["alpha"]
+        mean = spec.get("mean", 0)
+        return ND.DiscreteGaussianAlpha(alpha, q, mean=mean, n=n)
+
+    elif dist_type == "centeredbinomial":
+        eta = spec["eta"]
+        return ND.CenteredBinomial(eta, n=n)
+
+    elif dist_type == "uniform":
+        a, b = spec["a"], spec["b"]
+        return ND.Uniform(a, b, n=n)
+
+    elif dist_type == "uniformmod":
+        return ND.UniformMod(q, n=n)
+
+    elif dist_type == "sparseternary":
+        p, m = spec["p"], spec["m"]
+        return ND.SparseTernary(p, m, n=n)
+
+    elif dist_type == "sparsebinary":
+        hw = spec["hw"]
+        return ND.SparseBinary(hw, n=n)
+
+    elif dist_type == "binary":
+        return ND.Binary
+
+    elif dist_type == "ternary":
+        return ND.Ternary
+
+    else:
+        raise ValueError(f"Unknown distribution: {spec.get('distribution')}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="LWE security estimator CLI")
+    parser.add_argument("n", type=int, help="LWE dimension")
+    parser.add_argument("q", type=int, help="Modulus")
+    parser.add_argument("--s-dist", required=True, help="Secret distribution (JSON)")
+    parser.add_argument("--e-dist", required=True, help="Error distribution (JSON)")
+    parser.add_argument("--m", type=int, help="Number of samples")
+    parser.add_argument("--exact", action="store_true", help="Use exact (slower) estimation")
+
+    args = parser.parse_args()
+
+    s_spec = json.loads(args.s_dist)
+    e_spec = json.loads(args.e_dist)
+
+    s_dist = parse_distribution(s_spec, args.q)
+    e_dist = parse_distribution(e_spec, args.q)
+
+    kwargs = {
+        "n": args.n,
+        "q": args.q,
+        "Xs": s_dist,
+        "Xe": e_dist,
+    }
+    if args.m is not None:
+        kwargs["m"] = args.m
+
+    params = LWE.Parameters(**kwargs)
+
+    if args.exact:
+        result = LWE.estimate(params)
+    else:
+        result = LWE.estimate.rough(params)
+
+    # Extract minimum rop across all attacks
+    min_rop = float("inf")
+    for attack_name, attack_result in result.items():
+        if hasattr(attack_result, "get"):
+            rop = attack_result.get("rop", float("inf"))
+        elif hasattr(attack_result, "__getitem__"):
+            rop = attack_result.get("rop", float("inf"))
+        else:
+            continue
+        if rop < min_rop:
+            min_rop = rop
+
+    # Convert rop to security bits
+    import math
+    security_bits = int(math.log2(min_rop)) if min_rop < float("inf") else 0
+
+    print(security_bits)
+
+
+if __name__ == "__main__":
+    main()

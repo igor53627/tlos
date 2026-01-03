@@ -1,5 +1,11 @@
 \begin{thebibliography}{10}
 
+\bibitem{LatticeEstimator}
+M.~R. Albrecht et~al.
+\newblock lattice-estimator: Security estimates for lattice problems.
+\newblock \url{https://github.com/malb/lattice-estimator}, 2023.
+\newblock Accessed 2026.
+
 \bibitem{APS15}
 M.~R. Albrecht, R.~Player, and S.~Scott.
 \newblock On the concrete hardness of learning with errors.
@@ -17,7 +23,7 @@ R.~Canetti et~al.
 \bibitem{CLW25}
 Y.~Chen, H.~Lin, and B.~Waters.
 \newblock Indistinguishability obfuscation from lwe.
-\newblock Cryptology ePrint Archive, 2025.
+\newblock Cryptology ePrint Archive (Preprint), 2025.
 
 \bibitem{GGH13}
 S.~Garg, C.~Gentry, S.~Halevi, M.~Raykova, A.~Sahai, and B.~Waters.
@@ -50,15 +56,8 @@ A.~Jain, H.~Lin, and A.~Sahai.
 Y.~Ma, W.~Dai, and E.~Shi.
 \newblock Quasi-linear indistinguishability obfuscation via mathematical proofs
   of equivalence and applications.
-\newblock Cryptology ePrint Archive, Report 2025/307, 2025.
+\newblock Cryptology ePrint Archive, Report 2025/307 (Preprint), 2025.
 \newblock \url{https://eprint.iacr.org/2025/307}.
-
-\bibitem{MM09}
-D.~Micciancio and P.~Mol.
-\newblock Pseudorandom knapsacks and the sample complexity of {LWE}
-  search-to-decision reductions.
-\newblock In {\em CRYPTO}, pages 465--484, 2011.
-\newblock Binary-error LWE variant analysis.
 
 \bibitem{FIPS203}
 {NIST}.
