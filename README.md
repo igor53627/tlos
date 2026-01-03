@@ -215,29 +215,25 @@ tlos/
 │   ├── tlos-paper.pdf        # Full paper (source of truth)
 │   └── tlos.pdf              # Short paper
 └── examples/
-    ├── TLOSVault.sol         # DeFi: Hidden liquidation threshold (DEMO ONLY)
-    ├── TLOSKitties.sol       # NFT: Hidden trait generation (n=128, reduced)
-    ├── TLOSRecovery.sol      # Wallet: Phrase-based recovery with puzzle
-    ├── TLOSTreasureHunt.sol  # Honeypot: Commit-reveal + puzzle (educational)
-    ├── TLOSSealedAuction.sol # Gaming: Sealed-bid auction with puzzle
     ├── TLOSDeadManSwitch.sol # Inheritance: Heartbeat + hidden heir codes
-    └── TLOSStopLoss.sol      # DeFi: Hidden stop-loss triggers
+    ├── TLOSRecovery.sol      # Wallet: Phrase-based recovery with puzzle
+    ├── TLOSSealedAuction.sol # Gaming: Sealed-bid auction with puzzle
+    ├── TLOSStopLoss.sol      # DeFi: Hidden stop-loss triggers
+    └── TLOSTreasureHunt.sol  # Honeypot: Commit-reveal + puzzle (educational)
 ```
 
 ## Example Contracts
 
 The `examples/` directory contains demonstration contracts showing TLOS integration patterns for various use cases. **These are for education only - see warnings in each file.**
 
-| Example | Use Case | Layers Used | LWE n | Puzzle | Production Ready |
-|---------|----------|-------------|-------|--------|------------------|
-| TLOSWithPuzzleV4 | **Production** | 1-4 (all) | 384 | Yes | [OK] |
-| TLOSVault | DeFi liquidation | 2 (LWE only) | - | No | [X] Economically broken |
-| TLOSKitties | NFT traits | 2 (LWE only) | 128 | No | [X] Reduced security |
-| TLOSRecovery | Wallet recovery | 4 (puzzle) | - | Yes | [X] Needs phrase entropy |
-| TLOSTreasureHunt | Honeypot | 4 (puzzle) | - | Yes | [X] Educational |
-| TLOSSealedAuction | Sealed-bid auction | 4 (puzzle) | - | Yes | [X] Demo only |
-| TLOSDeadManSwitch | Inheritance | 4 (puzzle) | - | Yes | [X] Demo only |
-| TLOSStopLoss | Stop-loss trigger | 2 (circuit) | - | No | [X] Demo only |
+| Example | Use Case | Layers Used | Puzzle | Production Ready |
+|---------|----------|-------------|--------|------------------|
+| TLOSWithPuzzleV4 | **Production** | 1-4 (all) | Yes | [OK] |
+| TLOSDeadManSwitch | Inheritance | 4 (puzzle) | Yes | [X] Demo only |
+| TLOSRecovery | Wallet recovery | 4 (puzzle) | Yes | [X] Needs phrase entropy |
+| TLOSSealedAuction | Sealed-bid auction | 4 (puzzle) | Yes | [X] Demo only |
+| TLOSStopLoss | Stop-loss trigger | 2 (circuit) | No | [X] Demo only |
+| TLOSTreasureHunt | Honeypot | 4 (puzzle) | Yes | [X] Educational |
 
 **Layer key:**
 - Layer 1: Topology mixing (structural)

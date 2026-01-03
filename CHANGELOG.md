@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- `examples/TLOSKitties.sol` - Used deprecated n=128 LWE parameters (incompatible with production)
+- `examples/TLOSVault.sol` - Used incompatible `ITLOSCircuit.check()` interface
+
+### Changed
+- Updated README.md and wiki.json to remove references to deleted example contracts
+- Example contracts table simplified (removed obsolete entries)
+
 ## [0.5.2] - 2026-01-03
 
 ### Added
 - **Comprehensive test coverage** for TLOSWithPuzzleV4 (issue #41)
   - `test/TLOSWithPuzzleV4.t.sol`: 61 tests covering deployment, puzzle, wire binding, cross-layer, commit-reveal, gas
   - `test/TLOSWithPuzzleV4Harness.sol`: Test harness exposing internal functions for isolated layer testing
-  - `test/PuzzleVariants.t.sol`: 18 tests comparing all puzzle versions (V2, V4, V5, V6, V7)
+  - `test/PuzzleVariants.t.sol`: 13 tests comparing puzzle versions (V5, V6, V7)
 - **Per-layer technical documentation** in `docs/layers/`
   - `docs/layers/README.md`: 4-layer security model overview
   - `docs/layers/layer1-topology/`: Circuit mixing (heuristic, `src/circuit.rs`)

@@ -21,7 +21,14 @@
     "tests": {
       "TLOSWithPuzzleV4.t.sol": "Production contract tests (61 tests)",
       "TLOSWithPuzzleV4Harness.sol": "Test harness for isolated layer testing",
-      "PuzzleVariants.t.sol": "All puzzle versions comparison (18 tests)"
+      "PuzzleVariants.t.sol": "Puzzle versions comparison (13 tests)"
+    },
+    "examples": {
+      "TLOSDeadManSwitch": "Inheritance with heartbeat + hidden heir codes",
+      "TLOSRecovery": "Phrase-based wallet recovery with puzzle",
+      "TLOSSealedAuction": "Sealed-bid auction with puzzle protection",
+      "TLOSStopLoss": "Hidden stop-loss triggers (demo only)",
+      "TLOSTreasureHunt": "Educational honeypot with commit-reveal"
     },
     "scripts": {
       "attacks": {
